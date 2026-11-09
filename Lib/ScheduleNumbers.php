@@ -41,9 +41,9 @@ final class ScheduleNumbers
     }
 
     /**
-     * Removes the extension for a schedule's number. The core refuses while
-     * an incoming route or an off-work time rule still points at it, and
-     * returns its reasons.
+     * Removes the extension for a schedule's number, once the schedule itself
+     * is deleted. The core refuses while an incoming route or an off-work time
+     * rule still points at it, and returns its reasons.
      *
      * @return list<string> why it could not be removed; empty on success
      */

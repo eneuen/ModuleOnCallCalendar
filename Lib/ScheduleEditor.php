@@ -163,9 +163,9 @@ final class ScheduleEditor
     }
 
     /**
-     * Deletes a schedule and its plan. The caller removes its extension from
-     * the core first (which the core refuses while anything routes to it).
-     * DIALPLAN_RELOAD.
+     * Deletes a schedule and its plan. The caller checks first that nothing
+     * routes to its number, and removes the number from the core afterwards
+     * (the core refuses while the schedule exists). DIALPLAN_RELOAD.
      */
     public function deleteSchedule(int $id): void
     {

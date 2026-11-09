@@ -130,8 +130,13 @@ class Schedule extends ModulesModelsBase
      * Claims the schedule's number in the core's extensions table. The core
      * shows a MODULES extension in its destination pickers (incoming routes,
      * off-work time rules, IVR menus, forwarding) only when an enabled
-     * module's model is related to it. The same relation lets the core list
-     * a schedule's number as in use when something still routes to it.
+     * module's model is related to it.
+     *
+     * The relation restricts: the core refuses to delete the number while
+     * its schedule exists, so a schedule can't lose its number behind the
+     * module's back. (A cascade would silently delete the schedule's row
+     * whenever the number was deleted.) The module deletes the schedule
+     * first, then the number.
      */
     public static function getDynamicRelations(&$calledModelObject): void
     {
@@ -145,7 +150,7 @@ class Schedule extends ModulesModelsBase
                     'foreignKey' => [
                         'allowNulls' => true,
                         'message'    => 'Models\ModuleOnCallCalendarSchedule',
-                        'action'     => Relation::ACTION_CASCADE,
+                        'action'     => Relation::ACTION_RESTRICT,
                     ],
                 ]
             );

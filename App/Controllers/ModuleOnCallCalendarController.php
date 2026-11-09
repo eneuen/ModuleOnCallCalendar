@@ -294,11 +294,12 @@ class ModuleOnCallCalendarController extends BaseController
                 throw new EditorException('occ_ErrStillRouted', ['list' => $this->describeReferences($others)]);
             }
             $linker->unlinkAll($id);
+            // The schedule first: its number can't be deleted while the schedule exists (see Schedule::getDynamicRelations()).
+            $editor->deleteSchedule($id);
             $reasons = ScheduleNumbers::unregister((string)$schedule['number']);
             if ($reasons !== []) {
-                throw new EditorException('occ_ErrStillRouted', ['list' => implode(' ', $reasons)]);
+                SystemMessages::sysLogMsg(self::class, "Schedule {$schedule['number']} deleted, but its number stays: " . implode(' ', $reasons), LOG_WARNING);
             }
-            $editor->deleteSchedule($id);
 
             return [];
         }, true);
