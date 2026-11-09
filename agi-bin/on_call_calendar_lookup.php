@@ -30,7 +30,8 @@ try {
     $values = ModuleContext::currentValues(
         Databases::openReadOnly(ModuleContext::moduleDbFile()),
         Databases::openReadOnly(ModuleContext::coreDbFile()),
-        time()
+        time(),
+        $id
     )[$id] ?? null;
     if ($values !== null) {
         $agi->set_variable('OCC_START', $values['start']);

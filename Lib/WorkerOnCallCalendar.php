@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 namespace Modules\ModuleOnCallCalendar\Lib;
 
+use MikoPBX\Core\Asterisk\AsteriskManager;
 use MikoPBX\Core\System\BeanstalkClient;
 use MikoPBX\Core\System\SystemMessages;
 use MikoPBX\Core\System\Util;
@@ -99,11 +100,12 @@ class WorkerOnCallCalendar extends WorkerBase
                 $now
             );
             $ami = Util::getAstManager('off');
+            $written = [];
             foreach ($values as $id => $keys) {
-                foreach ($keys as $key => $value) {
-                    if (($this->published[$id][$key] ?? null) !== $value || $key === 'until') {
-                        $ami->DBPut(DialplanBuilder::FAMILY, "$id/$key", $value);
-                    }
+                $before = $this->published[$id] ?? null;
+                $changed = $before === null || array_diff_key($before, ['until' => 0]) !== array_diff_key($keys, ['until' => 0]);
+                if ($this->write($ami, $id, $keys, $changed)) {
+                    $written[$id] = $keys;
                 }
                 // Republish just after this answer stops being valid.
                 $this->nextPublish = min($this->nextPublish, (int)$keys['until'] + 1);
@@ -111,12 +113,47 @@ class WorkerOnCallCalendar extends WorkerBase
             foreach (array_diff_key($this->published, $values) as $id => $unused) {
                 $ami->sendRequestTimeout('DBDelTree', ['Family' => DialplanBuilder::FAMILY, 'Key' => (string)$id]);
             }
-            $this->published = $values;
+            $this->published = $written;
+            if (count($written) < count($values)) {
+                // Some answers were not written: try again soon.
+                $this->nextPublish = min($this->nextPublish, $now + 10);
+            }
         } catch (Throwable $e) {
             SystemMessages::sysLogMsg(static::class, 'Publishing who is on duty failed: ' . $e->getMessage(), LOG_ERR);
             $this->published = [];
             $this->nextPublish = $now + 10;
         }
+    }
+
+    /**
+     * Writes one schedule's answer: every key, every time, so an answer lost
+     * or changed outside the worker is put right within a minute. When the
+     * answer changed, "until" is set to 0 first and written last, so a call
+     * arriving mid-write finds an expired answer (and asks the live lookup)
+     * rather than a new "start" next to an old "dial". Any failed write
+     * leaves the answer expired.
+     *
+     * @param array<string, string> $keys
+     * @return bool whether everything was written
+     */
+    private function write(AsteriskManager $ami, int $id, array $keys, bool $changed): bool
+    {
+        $put = static fn (string $key, string $value): bool => strcasecmp(
+            (string)($ami->DBPut(DialplanBuilder::FAMILY, "$id/$key", $value)['Response'] ?? ''),
+            'Success'
+        ) === 0;
+        if ($changed && !$put('until', '0')) {
+            return false;
+        }
+        foreach (['start', 'dial', 'goto'] as $key) {
+            if (!$put($key, (string)$keys[$key])) {
+                $put('until', '0');
+
+                return false;
+            }
+        }
+
+        return $put('until', (string)$keys['until']);
     }
 
     private function clearAll(): void

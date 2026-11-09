@@ -47,17 +47,21 @@ final class ModuleContext
     }
 
     /**
-     * The AstDB values for every enabled schedule, right now.
+     * The AstDB values for every enabled schedule (or only $only), right now.
      *
      * @return array<int, array{start: string, dial: string, goto: string, until: string}>
      */
-    public static function currentValues(PDO $module, PDO $core, int $now): array
+    public static function currentValues(PDO $module, PDO $core, int $now, ?int $only = null): array
     {
         $repository = new ScheduleRepository($module);
         $directory = Employees::directory($core);
+        $schedules = $repository->schedules();
+        if ($only !== null) {
+            $schedules = array_values(array_filter($schedules, static fn (array $s): bool => (int)$s['id'] === $only));
+        }
 
         return DutyPublisher::values(
-            $repository->schedules(),
+            $schedules,
             static fn (int $id, string $since): array => $repository->plan($id, $directory, $since),
             self::timezone($core),
             $now

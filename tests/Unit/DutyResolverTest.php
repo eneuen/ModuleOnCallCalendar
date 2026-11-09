@@ -268,6 +268,42 @@ final class DutyResolverTest extends TestCase
         self::assertSame(['105'], self::at($plan, '2026-11-13 17:00')->targets);
     }
 
+    public function testRotationEndsAfterItsLastDayAndHandlesLongTurns(): void
+    {
+        $plan = self::itEmergencies();
+        $plan['rotations'][0]['active_hours'] = [];
+        $plan['rotations'][0]['turn_days'] = 10;
+        $plan['rotations'][0]['valid_until'] = '2026-11-30';
+
+        self::assertSame(['104'], self::at($plan, '2026-11-16 16:59')->targets);
+        self::assertSame(['105'], self::at($plan, '2026-11-16 17:00')->targets);
+        self::assertSame(['107'], self::at($plan, '2026-11-26 17:00')->targets);
+        self::assertSame(['107'], self::at($plan, '2026-11-30 23:59')->targets);
+        self::assertSame(DutyResolver::START_OUTSIDE, self::at($plan, '2026-12-01 00:00')->start);
+    }
+
+    public function testHandoverInTheSpringForwardGapHappensWhenTheClockJumps(): void
+    {
+        $plan = self::itEmergencies();
+        $plan['rotations'][0]['active_hours'] = [];
+        $plan['rotations'][0]['first_handover'] = '2026-03-22 02:30';
+
+        // 29 March 2026 02:30 doesn't exist in Berlin; the handover is at 03:30, right after the jump.
+        self::assertSame(['104'], self::at($plan, '2026-03-29 01:59')->targets);
+        self::assertSame(['105'], self::at($plan, '2026-03-29 03:30')->targets);
+    }
+
+    public function testNothingChangingForTwoWeeksStillExpires(): void
+    {
+        $plan = self::itEmergencies();
+        $plan['rotations'][0]['active_hours'] = [];
+        $plan['rotations'][0]['members'] = [1];
+        $segment = self::at($plan, '2026-11-10 12:00');
+
+        self::assertSame(['104'], $segment->targets);
+        self::assertSame(self::ts('2026-11-10 12:00') + 14 * 86400, $segment->to);
+    }
+
     public function testFirstRuleThatCoversWinsEvenWithAnEmptyCell(): void
     {
         $plan = self::serviceLine() + ['rotations' => [[

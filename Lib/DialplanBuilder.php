@@ -50,6 +50,9 @@ final class DialplanBuilder
 
     public const string LOOKUP_AGI = 'on_call_calendar_lookup.php';
 
+    /** How many schedules one call may pass through before it is sent to voicemail. */
+    public const int MAX_HOPS = 5;
+
     /**
      * Entries for [internal], one per enabled schedule.
      *
@@ -101,6 +104,9 @@ final class DialplanBuilder
 
         $lines = [
             "exten => $n,1,NoOp(On-call schedule $id: $name)",
+            // Schedules can send calls to each other; a misconfigured circle ends in voicemail, not a loop.
+            'same => n,Set(__OCC_HOPS=$[0${OCC_HOPS} + 1])',
+            'same => n,GotoIf($[${OCC_HOPS} > ' . self::MAX_HOPS . ']?loop)',
             'same => n,Set(TIMEOUT(absolute)=0)',
             // New call records for the legs rung from here, as the core does before forwarding.
             'same => n,Set(__pt1c_UNIQUEID=${UNDEFINED})',
@@ -115,13 +121,15 @@ final class DialplanBuilder
             'same => n,GotoIf($["${OCC_START}" == "go" & "${OCC_GOTO}x" != "x"]?elsewhere)',
             ...self::greeting($s),
             'same => n,GotoIf($["${OCC_START}" != "1" | "${OCC_DIAL}x" == "x"]?backup)',
-            ...self::ringWithoutForwarding('${OCC_DIAL}', $ring, $ringback),
+            ...self::ringWithoutForwarding('OCC_DIAL', $ring, $ringback, 'duty'),
             'same => n,GotoIf($["${DIALSTATUS}" == "ANSWER"]?done)',
             'same => n(backup),NoOp(On-call schedule ' . $id . ': backup)',
             ...self::backup($s),
             "same => n(final),Goto(internal,$final,1)",
             "same => n(outside),Goto(internal,$outside,1)",
             'same => n(elsewhere),Goto(internal,${OCC_GOTO},1)',
+            "same => n(loop),Log(WARNING,On-call schedule $id: calls go round in a circle of schedules - sent to voicemail)",
+            'same => n,Goto(internal,voicemail,1)',
             'same => n(done),Hangup()',
         ];
 
@@ -143,8 +151,9 @@ final class DialplanBuilder
 
         return match ($type) {
             'member' => [
-                ...self::ringWithoutForwarding("Local/$number@internal-users/n", self::seconds($s['backup_ring_seconds'] ?? 20),
-                    self::greeting($s) !== []),
+                "same => n,Set(OCC_BACKUP=Local/$number@internal-users/n)",
+                ...self::ringWithoutForwarding('OCC_BACKUP', self::seconds($s['backup_ring_seconds'] ?? 20),
+                    self::greeting($s) !== [], 'backup'),
                 'same => n,GotoIf($["${DIALSTATUS}" == "ANSWER"]?done)',
             ],
             'queue' => ["same => n,Goto(internal,$number,1)"],
@@ -153,22 +162,54 @@ final class DialplanBuilder
     }
 
     /**
-     * Rings through [internal-users] with the employees' own forwarding turned
-     * off for this call only. The core checks FW_DISABLE and
-     * FW_DISABLE_INTERNAL after its Dial and skips forwarding when both are 1.
-     * They are inherited (__) so they reach the far side of the Local channel,
+     * Rings the dial string in channel variable $dialVar (Local/<ext>@internal-users/n
+     * legs joined by &) through [internal-users], with each employee's own
+     * forwarding turned off for this call only:
+     * - FW_DISABLE and FW_DISABLE_INTERNAL make the core skip forwarding
+     *   after its Dial (it checks both).
+     * - FW_TIME_<ext> is the employee's own "forward after N seconds"; the
+     *   core uses it as the phone's ring time, which would cut this step
+     *   short. A channel variable shadows the global, so it is set to the
+     *   core's own no-forwarding value (600) for each leg; this step's Dial
+     *   timeout decides.
+     * All are inherited (__) so they reach the far side of the Local channel,
      * and cleared afterwards so later steps behave normally.
      *
      * @return list<string>
      */
-    private static function ringWithoutForwarding(string $dial, int $seconds, bool $ringback = false): array
+    private static function ringWithoutForwarding(string $dialVar, int $seconds, bool $ringback, string $label): array
     {
         return [
             'same => n,Set(__FW_DISABLE=1)',
             'same => n,Set(__FW_DISABLE_INTERNAL=1)',
-            "same => n,Dial($dial,$seconds" . ($ringback ? ',r' : '') . ')',
+            ...self::eachExtension($dialVar, "{$label}set", 'Set(__FW_TIME_${OCC_F}=600)'),
+            "same => n,Dial(\${{$dialVar}},$seconds" . ($ringback ? ',r' : '') . ')',
             'same => n,Set(__FW_DISABLE=)',
             'same => n,Set(__FW_DISABLE_INTERNAL=)',
+            ...self::eachExtension($dialVar, "{$label}clear", 'Set(__FW_TIME_${OCC_F}=)'),
+        ];
+    }
+
+    /**
+     * Runs $app once for every extension in a dial string (Local/<ext>@...
+     * legs joined by &), with the extension in OCC_F; anything that isn't
+     * a plain number is skipped. The dial string is read when the call
+     * arrives, so the loop is in the dialplan.
+     *
+     * @return list<string>
+     */
+    private static function eachExtension(string $dialVar, string $label, string $app): array
+    {
+        return [
+            'same => n,Set(OCC_I=0)',
+            "same => n($label),Set(OCC_I=\$[\${OCC_I} + 1])",
+            "same => n,GotoIf(\$[\${OCC_I} > \${FIELDQTY($dialVar,&)}]?{$label}done)",
+            "same => n,Set(OCC_F=\${CUT($dialVar,&,\${OCC_I})})",
+            'same => n,Set(OCC_F=${CUT(OCC_F,/,2)})',
+            'same => n,Set(OCC_F=${CUT(OCC_F,@,1)})',
+            "same => n,ExecIf(\$[\${REGEX(\"^[0-9]+\$\" \${OCC_F})}]?$app)",
+            "same => n,Goto($label)",
+            "same => n({$label}done),NoOp()",
         ];
     }
 

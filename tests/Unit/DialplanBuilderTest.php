@@ -32,9 +32,16 @@ final class DialplanBuilderTest extends TestCase
         self::assertStringContainsString('GotoIf($["${OCC_START}" == "go" & "${OCC_GOTO}x" != "x"]?elsewhere)', $plan);
         self::assertStringContainsString('same => n(elsewhere),Goto(internal,${OCC_GOTO},1)', $plan);
         self::assertMatchesRegularExpression(
-            '/Set\(__FW_DISABLE=1\)\n\tsame => n,Set\(__FW_DISABLE_INTERNAL=1\)\n\tsame => n,Dial\(\$\{OCC_DIAL\},20\)\n\tsame => n,Set\(__FW_DISABLE=\)/',
+            '/Set\(__FW_DISABLE=1\)\n\tsame => n,Set\(__FW_DISABLE_INTERNAL=1\)\n.*Set\(__FW_TIME_\$\{OCC_F\}=600\).*\n\tsame => n,Dial\(\$\{OCC_DIAL\},20\)\n\tsame => n,Set\(__FW_DISABLE=\)/s',
             $plan
         );
+        // Each on-duty person's own forward timer is shadowed for this call, then cleared.
+        self::assertStringContainsString('Set(OCC_F=${CUT(OCC_DIAL,&,${OCC_I})})', $plan);
+        self::assertStringContainsString('ExecIf($[${REGEX("^[0-9]+$" ${OCC_F})}]?Set(__FW_TIME_${OCC_F}=))', $plan);
+        // A circle of schedules ends in voicemail; no ';' (a comment in extensions.conf) in the warning.
+        self::assertStringContainsString('Set(__OCC_HOPS=$[0${OCC_HOPS} + 1])', $plan);
+        self::assertStringContainsString('GotoIf($[${OCC_HOPS} > 5]?loop)', $plan);
+        self::assertStringNotContainsString(';', $plan);
         self::assertStringContainsString('same => n(final),Goto(internal,voicemail,1)', $plan);
         self::assertStringContainsString('same => n(outside),Goto(internal,voicemail,1)', $plan);
     }
@@ -43,7 +50,9 @@ final class DialplanBuilderTest extends TestCase
     {
         $plan = DialplanBuilder::internal([['backup_type' => 'member', 'backup_extension' => '104', 'backup_ring_seconds' => 15] + self::SCHEDULE]);
 
-        self::assertStringContainsString('Dial(Local/104@internal-users/n,15)', $plan);
+        self::assertStringContainsString('Set(OCC_BACKUP=Local/104@internal-users/n)', $plan);
+        self::assertStringContainsString('Dial(${OCC_BACKUP},15)', $plan);
+        self::assertStringContainsString('Set(OCC_F=${CUT(OCC_BACKUP,&,${OCC_I})})', $plan);
     }
 
     public function testQueueBackupGetsTheCall(): void
@@ -99,7 +108,7 @@ final class DialplanBuilderTest extends TestCase
             $plan
         );
         self::assertStringContainsString('Dial(${OCC_DIAL},20,r)', $plan);
-        self::assertStringContainsString('Dial(Local/104@internal-users/n,20,r)', $plan);
+        self::assertStringContainsString('Dial(${OCC_BACKUP},20,r)', $plan);
     }
 
     public function testWithoutGreetingNoEarlyMedia(): void
