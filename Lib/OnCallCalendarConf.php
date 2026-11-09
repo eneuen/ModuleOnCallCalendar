@@ -82,7 +82,13 @@ class OnCallCalendarConf extends ConfigClass
     private function schedules(): array
     {
         try {
-            return (new ScheduleRepository(Databases::openReadOnly(ModuleContext::moduleDbFile())))->schedules();
+            $schedules = (new ScheduleRepository(Databases::openReadOnly(ModuleContext::moduleDbFile())))->schedules();
+            $directory = Employees::directory(Databases::openReadOnly(ModuleContext::coreDbFile()));
+            foreach ($schedules as &$schedule) {
+                $schedule['backup_extension'] = $directory[(int)$schedule['backup_user_id']]['extension'] ?? '';
+            }
+
+            return $schedules;
         } catch (Throwable $e) {
             SystemMessages::sysLogMsg(static::class, 'Schedules not read: ' . $e->getMessage(), LOG_ERR);
 

@@ -131,12 +131,14 @@ final class DialplanBuilder
      */
     private static function backup(array $s): array
     {
-        $number = self::target((string)($s['backup_number'] ?? ''));
+        // For a person, the caller resolves backup_user_id to their extension (backup_extension).
+        $type = (string)($s['backup_type'] ?? '');
+        $number = self::target((string)($type === 'member' ? ($s['backup_extension'] ?? '') : ($s['backup_number'] ?? '')));
         if ($number === null) {
             return [];
         }
 
-        return match ((string)($s['backup_type'] ?? '')) {
+        return match ($type) {
             'member' => [
                 ...self::ringWithoutForwarding("Local/$number@internal-users/n", self::seconds($s['backup_ring_seconds'] ?? 20)),
                 'same => n,GotoIf($["${DIALSTATUS}" == "ANSWER"]?done)',

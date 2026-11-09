@@ -45,7 +45,23 @@ final class TestDatabases
             extension VARCHAR, provider VARCHAR, priority INTEGER, timeout INTEGER, action VARCHAR, note VARCHAR, audio_message_id VARCHAR)');
         $pdo->exec('CREATE TABLE m_CallQueues (id INTEGER PRIMARY KEY AUTOINCREMENT, extension VARCHAR, name VARCHAR,
             caller_hear VARCHAR, timeout_to_redirect_to_extension INTEGER, timeout_extension VARCHAR, redirect_to_extension_if_empty VARCHAR)');
+        $pdo->exec('CREATE TABLE m_OutWorkTimes (id INTEGER PRIMARY KEY AUTOINCREMENT, extension VARCHAR, description VARCHAR)');
+        $pdo->exec('CREATE TABLE m_IvrMenu (id INTEGER PRIMARY KEY AUTOINCREMENT, uniqid VARCHAR, extension VARCHAR, name VARCHAR, timeout_extension VARCHAR)');
+        $pdo->exec('CREATE TABLE m_IvrMenuActions (id INTEGER PRIMARY KEY AUTOINCREMENT, ivr_menu_id VARCHAR, digits VARCHAR, extension VARCHAR)');
+        $pdo->exec('CREATE TABLE m_ExtensionForwardingRights (id INTEGER PRIMARY KEY AUTOINCREMENT, extension VARCHAR, forwarding VARCHAR,
+            forwardingonbusy VARCHAR, forwardingonunavailable VARCHAR, ringlength INTEGER)');
+        $pdo->exec("INSERT INTO m_IncomingRoutingTable (id, rulename, number, extension, priority, timeout)
+            VALUES (1, 'default action', '', 'busy', 9999, 0), (2, 'Service DID', '5551000', '2000', 1, 60), (3, 'Sales DID', '5551001', '201', 2, 20)");
+        $pdo->exec('CREATE TABLE m_SoundFiles (id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR, path VARCHAR, category VARCHAR)');
+        $pdo->exec("INSERT INTO m_SoundFiles (id, name, path, category) VALUES (5, 'Greeting', '/storage/greeting.mp3', 'custom')");
         $pdo->prepare('INSERT INTO m_PbxSettings VALUES (?, ?)')->execute(['PBXTimezone', $timezone]);
+        // What a fresh PBX has, plus a queue, an IVR menu and a parking slot.
+        foreach ([['voicemail', 'SYSTEM'], ['hangup', 'SYSTEM'], ['busy', 'SYSTEM'], ['2000', 'QUEUE'], ['2003', 'IVR MENU'],
+            ['800', 'PARKING']] as [$number, $type]) {
+            $pdo->prepare('INSERT INTO m_Extensions (number, type, callerid) VALUES (?, ?, ?)')->execute([$number, $type, $number]);
+        }
+        $pdo->exec("INSERT INTO m_CallQueues (extension, name, caller_hear, timeout_to_redirect_to_extension, timeout_extension,
+            redirect_to_extension_if_empty) VALUES ('2000', 'Service queue', 'moh', 60, 'voicemail', '')");
         foreach ($employees as $id => [$name, $extension]) {
             $pdo->prepare('INSERT INTO m_Users (id, username) VALUES (?, ?)')->execute([$id, $name]);
             if ($extension !== null) {

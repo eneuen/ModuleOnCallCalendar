@@ -41,7 +41,7 @@ final class DialplanBuilderTest extends TestCase
 
     public function testPersonBackupIsRungForItsOwnTime(): void
     {
-        $plan = DialplanBuilder::internal([['backup_type' => 'member', 'backup_number' => '104', 'backup_ring_seconds' => 15] + self::SCHEDULE]);
+        $plan = DialplanBuilder::internal([['backup_type' => 'member', 'backup_extension' => '104', 'backup_ring_seconds' => 15] + self::SCHEDULE]);
 
         self::assertStringContainsString('Dial(Local/104@internal-users/n,15)', $plan);
     }
@@ -80,7 +80,7 @@ final class DialplanBuilderTest extends TestCase
     {
         $plan = DialplanBuilder::internal([[
             'name' => 'Line), Hangup(', 'final_number' => 'voicemail,1)', 'backup_type' => 'member',
-            'backup_number' => '1&Local/9', 'ring_seconds' => 99999,
+            'backup_extension' => '1&Local/9', 'ring_seconds' => 99999,
         ] + self::SCHEDULE]);
 
         self::assertStringContainsString('NoOp(On-call schedule 7: Line Hangup)', $plan);

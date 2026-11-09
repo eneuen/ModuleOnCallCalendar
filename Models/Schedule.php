@@ -16,9 +16,10 @@ use Phalcon\Mvc\Model\Relation;
  *
  * The if-no-answer chain has a fixed shape, so it lives on this row:
  *   1. the person or people on duty, for ring_seconds;
- *   2. an optional backup: a person (rung for backup_ring_seconds) or a
- *      queue (the call is handed over, and the queue's own timeout and
- *      if-empty settings decide what follows);
+ *   2. an optional backup: a person (backup_user_id, an employee, rung for
+ *      backup_ring_seconds) or a queue (backup_number; the call is handed
+ *      over, and the queue's own timeout and if-empty settings decide what
+ *      follows);
  *   3. the final destination, any MikoPBX number (default: voicemail).
  * Outside covered hours the call goes to outside_number, or to the final
  * destination when that is empty.
@@ -69,9 +70,19 @@ class Schedule extends ModulesModelsBase
     public $backup_type = '';
 
     /**
+     * The backup queue's number.
+     *
      * @Column(type="string", nullable=true)
      */
     public $backup_number = '';
+
+    /**
+     * The backup person: an employee (the core's m_Users id), so a changed
+     * extension is followed.
+     *
+     * @Column(type="integer", nullable=true)
+     */
+    public $backup_user_id;
 
     /**
      * @Column(type="integer", nullable=false, default="20")
