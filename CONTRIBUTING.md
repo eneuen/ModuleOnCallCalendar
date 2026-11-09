@@ -64,7 +64,7 @@ The worker writes all of a schedule's keys every minute and checks each write. W
 
 ## Changing the database
 
-The core creates the module's tables from the model annotations in `Models/`. It takes the columns from model metadata it caches in Redis for 10 minutes, so an update installed within that time can miss a new column; `Setup/PbxExtensionSetup::installDB()` therefore adds any column a model declares that its table lacks. That covers new columns. A change the core can't make by adding a column (renaming, moving data, new indexes on an existing table) needs a numbered migration step in the installer.
+The core creates the module's tables from the model annotations in `Models/` on install, and adds new columns on update. A change it can't make by adding a column (renaming, moving data, new indexes on an existing table) needs a numbered migration step in the installer.
 
 ## Layout
 
