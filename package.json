@@ -7,11 +7,8 @@
     "build": "node build/build.mjs"
   },
   "devDependencies": {
-    "@fullcalendar/core": "6.1.22",
-    "@fullcalendar/daygrid": "6.1.22",
-    "@fullcalendar/interaction": "6.1.22",
-    "@fullcalendar/list": "6.1.22",
-    "@fullcalendar/timegrid": "6.1.22",
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "fullcalendar": "7.1.3",
+    "temporal-polyfill": "1.0.6"
   }
 }

@@ -1,65 +1,720 @@
-/* On Call Calendar page. Colours follow the admin cabinet's Fomantic UI theme. */
+/*
+ * On Call Calendar page (GPL-3.0-or-later).
+ *
+ * Every rule is scoped to the page shell (.occ-page) or to its dialogs
+ * (.occ-modal, which Fomantic moves to the end of the body), so nothing here
+ * changes the rest of the admin cabinet. Colours and sizes come from the
+ * tokens below. The calendar uses FullCalendar's Pulse theme, which reads its
+ * own --fc-pulse-* tokens; they are set from ours so it matches the cabinet.
+ *
+ * Sections: tokens, basics, people, home, wizard, schedule, calendar,
+ * roster, rotation, settings, activity, narrow screens.
+ */
 
-.occ-hidden { display: none !important; }
-.occ-hint { color: #767676; font-size: .9em; margin-top: .25em; }
-.occ-label { color: #767676; font-size: .85em; text-transform: uppercase; letter-spacing: .03em; }
-.occ-center { text-align: center; }
-.occ-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5em; margin-bottom: 1em; }
-.occ-toolbar .occ-title { margin: 0 0 0 .5em; }
-.occ-clock { margin-left: auto; color: #767676; }
-.occ-actions { margin-top: 1.5em; display: flex; gap: .5em; }
-.occ-flash { position: fixed; right: 1.5em; bottom: 1.5em; z-index: 2000; }
+/* ----------------------------------------------------------------- tokens */
 
-/* Home cards */
-.occ-cards.ui.cards > .card { width: calc(50% - 2em); }
-.occ-now { margin-top: .8em; padding: .6em .8em; border-radius: 4px; border-left: 4px solid; }
-.occ-now-on { background: #e6f6ec; border-color: #21ba45; }
-.occ-now-gap { background: #fff6e5; border-color: #f2711c; }
-.occ-now-off { background: #f5f7fa; border-color: #a0a0a0; }
-.occ-next { margin-top: .6em; }
-.occ-templates.ui.cards > .card { cursor: pointer; }
-.occ-templates.ui.cards > .card.occ-selected { box-shadow: 0 0 0 2px #2185d0; }
+.occ-page,
+.occ-modal {
+    --occ-text: #1f2933;
+    --occ-muted: #5f6b7a;
+    --occ-faint: #8a94a3;
+    --occ-border: #e3e7ed;
+    --occ-border-strong: #cdd4dd;
+    --occ-surface: #fff;
+    --occ-subtle: #f7f9fb;
+    --occ-hover: #eef5fc;
 
-/* People lists (rotation order, cell editor) */
-.occ-people-list { padding-left: 1.5em; margin: .5em 0; }
-.occ-people-list li { display: flex; align-items: center; justify-content: space-between; padding: .2em 0; }
-.occ-row-actions { white-space: nowrap; }
-.occ-row-actions .ui.button { margin: 0 0 0 .2em; }
+    /* The cabinet's primary blue and Fomantic's status colours. */
+    --occ-primary: #2185d0;
+    --occ-primary-hover: #1678c2;
+    --occ-primary-active: #1a69a4;
+    --occ-green: #21ba45;
+    --occ-green-bg: #eaf7ee;
+    --occ-green-text: #17783a;
+    --occ-orange: #f2711c;
+    --occ-orange-bg: #fff3ea;
+    --occ-orange-text: #ad4c0d;
+    --occ-red: #db2828;
+    --occ-red-bg: #fdeeee;
+    --occ-red-text: #b21e1e;
+    --occ-grey: #767676;
+    --occ-grey-bg: #f0f2f5;
 
-/* Roster grid */
-.occ-roster td { vertical-align: top; }
-.occ-shift-cell { background: #f9fafb; }
-.occ-shift-name { font-weight: bold; }
-.occ-cell { min-height: 3em; }
-.occ-cell-editable { cursor: pointer; }
-.occ-cell-editable:hover { background: #f1f8ff; }
-.occ-cell-empty { background: #fdecec; }
-.occ-cell-off { background: repeating-linear-gradient(45deg, #f5f7fa, #f5f7fa 6px, #eceff3 6px, #eceff3 12px); }
-.occ-chip.ui.label { display: block; margin: 0 0 .25em; background: #fff; border: 1px solid #ddd; }
+    --occ-radius: 8px;
+    --occ-radius-small: 5px;
+    --occ-shadow: 0 1px 2px rgb(16 24 40 / 5%), 0 1px 3px rgb(16 24 40 / 7%);
 
-/* Calendar */
-.occ-calendar { margin-top: .5em; }
-.occ-legend { display: flex; align-items: center; gap: .4em; flex-wrap: wrap; color: #555; margin-bottom: .5em; }
-.occ-swatch { display: inline-block; width: 1.2em; height: .9em; border-radius: 2px; margin-left: .8em; }
-.occ-swatch-plan { background: #2185d033; border: 1px solid #2185d0; }
-.occ-swatch-override { background: #2185d0; }
-.occ-swatch-gap, .occ-calendar .occ-ev-gap {
-    background: repeating-linear-gradient(45deg, #f8cfcf, #f8cfcf 6px, #fdecec 6px, #fdecec 12px) !important;
-    opacity: 1 !important;
+    /* Time nobody is planned for (red) and days a shift doesn't run (grey). */
+    --occ-gap-stripes: repeating-linear-gradient(45deg, #f8dada 0 6px, #fdf1f1 6px 12px);
+    --occ-off-stripes: repeating-linear-gradient(45deg, #eef0f3 0 6px, #f8f9fb 6px 12px);
 }
-.occ-calendar .occ-ev-gap-label { font-size: .8em; box-shadow: none; }
-.occ-calendar .occ-ev-plan { border-left-width: 3px !important; }
-.occ-calendar .occ-ev-override { font-weight: bold; }
-.occ-calendar .fc .fc-toolbar-title { font-size: 1.3em; }
-.occ-preview { max-width: 30em; }
+
+/* ----------------------------------------------------------------- basics */
+
+.occ-page { color: var(--occ-text); }
+.occ-hidden { display: none !important; }
+.occ-center { text-align: center; }
+
+.occ-hint {
+    margin: .3em 0 0;
+    color: var(--occ-muted);
+    font-size: .92em;
+    line-height: 1.45;
+}
+
+.occ-below { margin-top: 1em; }
+
+.occ-label {
+    color: var(--occ-faint);
+    font-size: .76em;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+/* An icon and a line of text; the text wraps beside the icon, not under it. */
+.occ-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: .4em;
+    color: var(--occ-muted);
+    font-size: .92em;
+}
+
+.occ-meta > .icon,
+.occ-hint > .icon { margin: 0 .2em 0 0; }
+.occ-warn { color: var(--occ-orange-text); }
+.occ-muted-icon.icon { color: var(--occ-faint); }
+.occ-empty { margin: .5em 0; color: var(--occ-muted); }
+.occ-loader.ui.loader { margin: 3em auto; }
+
+.occ-flash {
+    position: fixed;
+    right: 1.5em;
+    bottom: 1.5em;
+    z-index: 2000;
+    box-shadow: var(--occ-shadow);
+}
+
+.occ-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5em;
+    margin-bottom: 1em;
+}
+
+.occ-toolbar-end {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4em;
+    margin-left: auto;
+}
+
+.occ-clock { margin-left: auto; color: var(--occ-muted); }
+
+.occ-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5em;
+    margin-top: 1.25em;
+}
+
+/* Fomantic spaces buttons with margins; the layouts above use gap instead. */
+.occ-toolbar .ui.button,
+.occ-actions .ui.button,
+.occ-head .ui.button,
+.occ-icon-actions .ui.button,
+.occ-card-foot .ui.button,
+.occ-section-head .ui.button,
+.occ-range .ui.button { margin: 0; }
+
+.occ-icon-actions { display: inline-flex; gap: .25em; }
+
+/* An extension or schedule number. */
+.occ-number {
+    display: inline-block;
+    padding: .15em .6em;
+    border-radius: 999px;
+    background: var(--occ-grey-bg);
+    color: var(--occ-muted);
+    font-size: .86em;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.occ-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .4em;
+    padding: .35em .75em;
+    border-radius: 999px;
+    font-size: .82em;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.occ-pill > .icon { margin: 0; }
+.occ-pill-green { background: var(--occ-green-bg); color: var(--occ-green-text); }
+.occ-pill-orange { background: var(--occ-orange-bg); color: var(--occ-orange-text); }
+.occ-pill-red { background: var(--occ-red-bg); color: var(--occ-red-text); }
+.occ-pill-grey { background: var(--occ-grey-bg); color: var(--occ-muted); }
+a.occ-pill:hover { filter: brightness(.96); }
+
+/* A titled block of a tab. */
+.occ-section,
+.occ-panel {
+    padding: 1.25em 1.4em;
+    border: 1px solid var(--occ-border);
+    border-radius: var(--occ-radius);
+    background: var(--occ-surface);
+}
+
+.occ-section + .occ-section,
+.occ-section + .occ-actions + .occ-section,
+.ui.form + .occ-section { margin-top: 1em; }
+
+.occ-section-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .6em 1em;
+}
+
+.occ-section-title,
+.occ-panel-title {
+    margin: 0;
+    color: var(--occ-text);
+    font-size: 1.08em;
+    font-weight: 700;
+}
+
+.occ-panel-title { font-size: 1.3em; }
+.occ-subtitle { margin-top: 1.5em; }
+.occ-section > .occ-hint { margin-bottom: 1em; }
+.occ-section > .occ-section-title + :not(.occ-hint) { margin-top: 1em; }
+.occ-section-danger { border-color: #f1c4c4; }
+.occ-section-danger .occ-section-title { margin-bottom: .8em; color: var(--occ-red-text); }
+
+/* A numbered list of rows: rotation people, people in a dialog, rule order. */
+.occ-list {
+    margin: .5em 0 1em;
+    padding: 0;
+    border: 1px solid var(--occ-border);
+    border-radius: var(--occ-radius);
+    list-style: none;
+    counter-reset: occ-item;
+}
+
+.occ-list > li {
+    display: flex;
+    align-items: center;
+    gap: .75em;
+    min-height: 3em;
+    padding: .45em .75em;
+    counter-increment: occ-item;
+}
+
+.occ-list > li + li { border-top: 1px solid var(--occ-border); }
+
+.occ-list > li::before {
+    content: counter(occ-item);
+    min-width: 1.2em;
+    color: var(--occ-faint);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.occ-list > li > .occ-icon-actions { margin-left: auto; }
+.occ-plain-list { margin: .3em 0 0; padding-left: 1.3em; }
+
+/* ----------------------------------------------------------------- people */
+
+/* Initials in the person's colour; the colour comes in as --occ-person. */
+.occ-person {
+    --occ-person: var(--occ-grey);
+    display: inline-flex;
+    align-items: center;
+    gap: .5em;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.occ-avatar {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 2.5em;
+    height: 2.5em;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--occ-person) 18%, white);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--occ-person) 55%, white);
+    color: color-mix(in srgb, var(--occ-person) 65%, black);
+    font-size: .75em;
+    font-weight: 700;
+    letter-spacing: .02em;
+}
+
+.occ-person-name {
+    overflow: hidden;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.occ-person-detail {
+    color: var(--occ-faint);
+    font-size: .9em;
+    font-variant-numeric: tabular-nums;
+}
+
+.occ-people {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45em 1em;
+}
+
+.occ-people-stack { flex-direction: column; gap: .35em; }
+.occ-decision { font-weight: 600; }
+
+/* ----------------------------------------------------------------- home */
+
+.occ-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+    gap: 1rem;
+}
+
+.occ-card {
+    display: flex;
+    flex-direction: column;
+    gap: .9em;
+    padding: 1.15em 1.25em;
+    border: 1px solid var(--occ-border);
+    border-radius: var(--occ-radius);
+    background: var(--occ-surface);
+    box-shadow: var(--occ-shadow);
+}
+
+.occ-card-disabled { background: var(--occ-subtle); box-shadow: none; }
+
+.occ-card-title { display: grid; gap: .35em; }
+.occ-card-title .occ-meta { flex-wrap: wrap; }
+
+.occ-card-name {
+    color: var(--occ-text);
+    font-size: 1.15em;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.occ-card-name:hover { color: var(--occ-primary); }
+
+.occ-now {
+    display: grid;
+    gap: .55em;
+    padding: .75em .9em;
+    border-left: 4px solid;
+    border-radius: var(--occ-radius-small);
+}
+
+.occ-now-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .25em .75em;
+}
+
+.occ-now-on { border-color: var(--occ-green); background: var(--occ-green-bg); }
+.occ-now-gap { border-color: var(--occ-orange); background: var(--occ-orange-bg); }
+.occ-now-off { border-color: var(--occ-border-strong); background: var(--occ-subtle); }
+
+.occ-next {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5em .75em;
+    padding: 0 .9em;
+    color: var(--occ-muted);
+}
+
+.occ-next-time { font-variant-numeric: tabular-nums; }
+.occ-next .occ-decision { font-weight: 400; }
+
+.occ-card-foot {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: .75em;
+    margin-top: auto;
+    padding-top: .85em;
+    border-top: 1px solid var(--occ-border);
+}
+
+.occ-card-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .45em .75em;
+    min-width: 0;
+}
+
+.occ-card-foot > .ui.button { flex: none; }
+
+/* ----------------------------------------------------------------- wizard */
+
+.occ-wizard { counter-reset: occ-step; }
+
+/* Numbered by a counter, so the step that is hidden for some templates leaves no hole. */
+.occ-step-title {
+    display: flex;
+    align-items: center;
+    gap: .65em;
+    margin: 1.75em 0 .6em;
+    font-size: 1.05em;
+    font-weight: 700;
+    counter-increment: occ-step;
+}
+
+.occ-step-title::before {
+    content: counter(occ-step);
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 1.75em;
+    height: 1.75em;
+    border-radius: 50%;
+    background: var(--occ-hover);
+    color: var(--occ-primary);
+    font-size: .9em;
+}
+
+.occ-panel-title + .occ-step-title { margin-top: 1em; }
+
+.occ-choices {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+    gap: .75em;
+    margin-bottom: 1.25em;
+}
+
+.occ-choice {
+    display: flex;
+    align-items: flex-start;
+    gap: .8em;
+    padding: .95em 1em;
+    border: 1px solid var(--occ-border);
+    border-radius: var(--occ-radius);
+    background: var(--occ-surface);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s, background-color .15s;
+}
+
+.occ-choice:hover { border-color: var(--occ-border-strong); }
+.occ-choice:focus-visible { outline: 2px solid var(--occ-primary); outline-offset: 2px; }
+
+.occ-choice[aria-pressed="true"] {
+    border-color: var(--occ-primary);
+    background: var(--occ-hover);
+    box-shadow: 0 0 0 1px var(--occ-primary);
+}
+
+.occ-choice > .icon { margin: .1em 0 0; color: var(--occ-primary); font-size: 1.35em; }
+.occ-choice-title { display: block; margin-bottom: .2em; font-weight: 700; }
+.occ-choice-text { display: block; color: var(--occ-muted); font-size: .92em; line-height: 1.4; }
+
+/* ----------------------------------------------------------------- schedule */
+
+.occ-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5em .75em;
+    margin-bottom: 1em;
+}
+
+.occ-head-title { margin: 0 0 0 .25em; font-size: 1.4em; }
+
+.occ-tabs.ui.secondary.pointing.menu {
+    margin: 0 0 1.25em;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none; /* narrow screens swipe the tabs */
+}
+
+.occ-tabs.ui.menu .item { white-space: nowrap; }
+.occ-tabs.ui.menu .item > .icon { opacity: .75; }
+.occ-submenu.ui.secondary.menu { flex-wrap: wrap; margin: 0 0 1em; }
+
+/* Dialogs */
+.occ-modal .occ-people-editor { margin-bottom: 1em; }
+
+/* ----------------------------------------------------------------- calendar */
+
+.occ-cal-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5em 1.5em;
+    margin-bottom: 1em;
+}
+
+.occ-cal-meta > .occ-hint { flex: 1 1 26em; margin: 0; }
+
+.occ-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4em 1.1em;
+    color: var(--occ-muted);
+    font-size: .9em;
+}
+
+.occ-legend-item { display: inline-flex; align-items: center; gap: .45em; }
+
+.occ-swatch {
+    width: 1em;
+    height: 1em;
+    border-radius: 3px;
+}
+
+.occ-swatch-plan { background: color-mix(in srgb, var(--occ-primary) 22%, white); }
+.occ-swatch-override { background: var(--occ-primary); }
+.occ-swatch-gap { background-image: var(--occ-gap-stripes); box-shadow: inset 0 0 0 1px #efc2c2; }
+
+/*
+ * Pulse sets its sizes on hashed class names; the selectors below are one
+ * class stronger so the calendar uses the cabinet's 14px text.
+ */
+.occ-page .occ-calendar {
+    --fc-pulse-primary: var(--occ-primary);
+    --fc-pulse-primary-over: var(--occ-primary-hover);
+    --fc-pulse-primary-down: var(--occ-primary-active);
+    --fc-pulse-tertiary: var(--occ-primary);
+    --fc-pulse-tertiary-over: var(--occ-primary-hover);
+    --fc-pulse-tertiary-down: var(--occ-primary-active);
+    --fc-pulse-event: var(--occ-primary);
+    --fc-pulse-highlight: rgb(33 133 208 / 10%);
+    --fc-pulse-now: var(--occ-red);
+    --fc-pulse-foreground: var(--occ-text);
+    --fc-pulse-muted-foreground: var(--occ-muted);
+    --fc-pulse-border: var(--occ-border);
+    --fc-pulse-strong-border: var(--occ-border-strong);
+    font-size: 14px;
+}
+
+.occ-page .occ-cal-title { font-size: 1.45em; font-weight: 700; }
+.occ-page .occ-ev-gap { background-image: var(--occ-gap-stripes); opacity: 1; }
+.occ-page .occ-ev-gap-label { font-weight: 700; }
+.occ-page .occ-ev-title { white-space: normal; overflow-wrap: anywhere; }
+
+/* ----------------------------------------------------------------- roster */
+
+.occ-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--occ-border);
+    border-radius: var(--occ-radius);
+}
+
+.occ-roster {
+    width: 100%;
+    min-width: 50rem;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.occ-roster th,
+.occ-roster td {
+    padding: .6em .65em;
+    border-bottom: 1px solid var(--occ-border);
+    border-left: 1px solid var(--occ-border);
+    text-align: left;
+    vertical-align: top;
+}
+
+.occ-roster tr > :first-child { width: 11.5em; border-left: 0; }
+.occ-roster tbody tr:last-child > * { border-bottom: 0; }
+
+.occ-roster thead th {
+    background: var(--occ-subtle);
+    color: var(--occ-muted);
+    font-size: .8em;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.occ-shift { background: var(--occ-subtle); font-weight: 400; }
+.occ-shift-name { font-weight: 700; }
+
+.occ-shift-time {
+    color: var(--occ-muted);
+    font-size: .9em;
+    font-variant-numeric: tabular-nums;
+}
+
+.occ-shift-time > .icon { margin-right: .3em; }
+.occ-shift .occ-icon-actions { margin-top: .5em; }
+.occ-cell { height: 4.75em; }
+.occ-cell .occ-person { font-size: .92em; }
+.occ-cell-off { background-image: var(--occ-off-stripes); }
+.occ-cell-empty { background: var(--occ-red-bg); }
+.occ-cell-empty-text { color: var(--occ-red-text); font-size: .85em; }
+
+.occ-cell-editable {
+    cursor: pointer;
+    transition: background-color .12s, box-shadow .12s;
+}
+
+.occ-cell-editable:hover { background: var(--occ-hover); }
+.occ-cell-editable:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--occ-primary); }
+
+/* ----------------------------------------------------------------- rotation */
+
+.occ-chain {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4em .5em;
+}
+
+.occ-chain-arrow.icon { margin: 0; color: var(--occ-faint); }
+
+.occ-timeline {
+    max-width: 38em;
+    margin: .5em 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.occ-timeline > li {
+    display: grid;
+    grid-template-columns: 12em minmax(0, 1fr) auto;
+    align-items: center;
+    gap: .75em;
+    padding: .4em .7em;
+    border-radius: var(--occ-radius-small);
+}
+
+.occ-timeline > li + li { border-top: 1px solid var(--occ-border); }
+.occ-timeline > .occ-current { border-color: transparent; background: var(--occ-green-bg); }
+.occ-timeline > .occ-current + li { border-top-color: transparent; }
+.occ-timeline-when { color: var(--occ-muted); font-variant-numeric: tabular-nums; }
+
+.occ-tag {
+    color: var(--occ-green-text);
+    font-size: .76em;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
 .occ-window.ui.segment { padding: .6em .8em; }
-.occ-link { margin: .5em 0 1em; }
+
+/* ----------------------------------------------------------------- settings */
+
+/* The steps a call goes through, numbered and joined by a line. */
+.occ-steps {
+    margin: 0 0 1em;
+    padding: 0;
+    list-style: none;
+    counter-reset: occ-chain;
+}
+
+.occ-steps > li {
+    position: relative;
+    padding: 0 0 .5em 2.9em;
+    counter-increment: occ-chain;
+}
+
+.occ-steps > li::before {
+    content: counter(occ-chain);
+    position: absolute;
+    top: 1.45em;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9em;
+    height: 1.9em;
+    border-radius: 50%;
+    background: var(--occ-hover);
+    color: var(--occ-primary);
+    font-weight: 700;
+}
+
+.occ-steps > li:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 3.5em;
+    bottom: -1.3em;
+    left: .9em;
+    width: 2px;
+    background: var(--occ-border);
+}
+
+.occ-save-bar { margin: 1em 0 0; }
+.occ-inline-action.ui.action.input { max-width: 36em; margin-top: .25em; }
+.occ-rule-backup + .occ-rule-backup { margin-top: .9em; }
+.occ-rule-backup.ui.form .fields { margin-top: .3em; margin-bottom: 0; }
+
+/* ----------------------------------------------------------------- activity */
+
+.occ-range {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4em;
+}
+
+.occ-range.ui.form input[type="date"] { width: auto; }
+
+.occ-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+    gap: .75em;
+    margin: 1.1em 0;
+}
+
+.occ-stat {
+    padding: .85em 1em;
+    border: 1px solid var(--occ-border);
+    border-top: 3px solid var(--occ-border-strong);
+    border-radius: var(--occ-radius-small);
+}
+
+.occ-stat-on_duty { border-top-color: var(--occ-green); }
+.occ-stat-other { border-top-color: var(--occ-primary); }
+.occ-stat-voicemail { border-top-color: var(--occ-orange); }
+.occ-stat-unanswered { border-top-color: var(--occ-red); }
+
+.occ-stat-value {
+    font-size: 1.75em;
+    font-weight: 700;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+}
+
+.occ-stat-label { margin-top: .25em; color: var(--occ-muted); font-size: .88em; line-height: 1.3; }
+.occ-stat-note { color: var(--occ-faint); font-size: .85em; }
 .occ-audit td { vertical-align: top; }
-.occ-rule-backup { margin-bottom: .8em; }
+
+/* ----------------------------------------------------------------- narrow screens */
 
 @media (max-width: 767px) {
-    .occ-cards.ui.cards > .card { width: 100%; }
+    .occ-section,
+    .occ-panel { padding: 1em; }
+
+    .occ-clock { margin-left: 0; }
+    .occ-timeline > li { grid-template-columns: minmax(0, 1fr) auto; }
+    .occ-timeline-when { grid-column: 1 / -1; }
+    .occ-steps > li { padding-left: 2.5em; }
 }
-.occ-stats.ui.statistics { margin: .5em 0 1em; flex-wrap: nowrap; }
-.occ-stats.ui.statistics > .statistic { flex: 1 1 0; margin: 0 .5em 1em 0; }
-.occ-stats.ui.statistics .statistic > .label { text-transform: none; }

@@ -1,0 +1,4 @@
+/* FullCalendar's structural styles, the Pulse theme and its blue palette, bundled into one file. */
+@import 'fullcalendar/skeleton.css';
+@import 'fullcalendar/themes/pulse/theme.css';
+@import 'fullcalendar/themes/pulse/palettes/blue.css';

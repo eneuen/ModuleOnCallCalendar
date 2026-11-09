@@ -38,7 +38,8 @@ php -r 'json_decode(file_get_contents("module.json"), false, 4, JSON_THROW_ON_ER
 
 # Sanity checks on what is about to ship.
 for f in module.json LICENSE Lib/OnCallCalendarConf.php Setup/PbxExtensionSetup.php \
-         public/assets/js/on-call-calendar.js public/assets/js/vendor/fullcalendar.min.js; do
+         public/assets/js/on-call-calendar.js public/assets/js/vendor/fullcalendar.min.js \
+         public/assets/css/on-call-calendar.css public/assets/css/vendor/fullcalendar.min.css; do
     [ -f "$f" ] || { echo "Missing from the package: $f" >&2; exit 1; }
 done
 if find . -name '*.db' -o -name '.DS_Store' -o -name '._*' | grep -q .; then

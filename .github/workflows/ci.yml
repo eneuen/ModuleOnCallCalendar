@@ -51,4 +51,4 @@ jobs:
       - run: npm audit --audit-level=low
       - run: npm run build
       - name: Committed bundles match their sources
-        run: git diff --exit-code -- public/assets/js
+        run: git diff --exit-code -- public/assets/js public/assets/css/vendor

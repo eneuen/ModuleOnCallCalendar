@@ -509,7 +509,8 @@ def caller_name_prefix(p, c):
 
 
 @scenario("*22 from a phone: 303, a member, takes over from 301 until the plan next changes and gets the next call; "
-          "304, not a member, can't.")
+          "304, not a member, can't. 303 dials *22 with the schedule's number, so other schedules on the test PBX "
+          "that 303 belongs to don't make the code ambiguous.")
 def takeover_by_phone(p, c):
     p.reset()
     p.roster_today("301")
@@ -527,7 +528,7 @@ def takeover_by_phone(p, c):
     c.that(p.published().get("dial") == dial_of("301"), "a non-member's *22 changes nothing")
 
     t = Line("303")
-    t.dial("*22")
+    t.dial(f"*22{PROBE_NUMBER}")
     c.that(answered(t, 8), "303's *22 is answered")
     t.closed(15)
     try:

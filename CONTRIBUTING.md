@@ -28,7 +28,7 @@ composer install -d tools/phpstan --ignore-platform-req='ext-*'
 composer analyse
 ```
 
-The browser assets are built from `public/assets/js/src/` and `build/fullcalendar-entry.js`, and the built files are committed:
+The browser assets are built from `public/assets/js/src/`, `build/fullcalendar-entry.js` and `build/fullcalendar.css` (FullCalendar's base styles and its Pulse theme), and the built files are committed. The page's own styles, `public/assets/css/on-call-calendar.css`, are not built: they are scoped to the page, take their colours from the custom properties at their top, and set FullCalendar's `--fc-pulse-*` properties from those.
 
 ```bash
 npm ci
@@ -90,7 +90,7 @@ The core creates the module's tables from the model annotations in `Models/` on 
 | `Models/` | Tables in the module's database |
 | `Setup/PbxExtensionSetup.php` | Installer: sidebar entry, and on uninstall the AGI link and AstDB keys the core leaves behind |
 | `App/Controllers/`, `App/Views/` | The module page and its JSON actions, each checked against the role's rights. Reads are AJAX GETs; writes must be AJAX POSTs with a Bearer token that grants the action |
-| `public/assets/` | Page script and styles; `js/vendor/` holds the FullCalendar bundle and its licence |
+| `public/assets/` | Page script and styles; `js/vendor/` and `css/vendor/` hold the FullCalendar bundles, `js/vendor/` also its licence |
 | `Messages/` | Interface text (English and Russian) |
 | `build/`, `package.json` | Builds the browser assets with esbuild, and the release zip (`build/package.sh`) |
 | `tests/Unit/` | PHPUnit tests that run without a PBX |

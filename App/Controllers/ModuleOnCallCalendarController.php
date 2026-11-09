@@ -82,12 +82,11 @@ class ModuleOnCallCalendarController extends BaseController
     {
         $base = 'js/cache/' . OnCallCalendarConf::MODULE_ID;
         $this->assets->collection(AssetProvider::SEMANTIC_UI_CSS)
-            ->addCss('css/vendor/semantic/modal.min.css', true)
-            ->addCss('css/vendor/semantic/card.min.css', true)
-            ->addCss('css/vendor/semantic/statistic.min.css', true);
+            ->addCss('css/vendor/semantic/modal.min.css', true);
         $this->assets->collection(AssetProvider::SEMANTIC_UI_JS)
             ->addJs('js/vendor/semantic/modal.min.js', true);
         $this->assets->collection(AssetProvider::HEADER_CSS)
+            ->addCss('css/cache/' . OnCallCalendarConf::MODULE_ID . '/vendor/fullcalendar.min.css', true)
             ->addCss('css/cache/' . OnCallCalendarConf::MODULE_ID . '/on-call-calendar.css', true);
         $this->assets->collection(AssetProvider::FOOTER_JS)
             ->addJs("$base/vendor/fullcalendar.min.js", true)
