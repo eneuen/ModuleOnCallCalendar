@@ -1,0 +1,16 @@
+# Files for developing the module, not for running it. They stay in the
+# repository but are left out of every archive git makes: the release zip
+# and GitHub's "Source code" downloads. docs/ holds the README's screenshots.
+/.github                 export-ignore
+/CONTRIBUTING.md         export-ignore
+/docs                    export-ignore
+/build                   export-ignore
+/tests                   export-ignore
+/tools                   export-ignore
+/public/assets/js/src    export-ignore
+/composer.json           export-ignore
+/composer.lock           export-ignore
+/package.json            export-ignore
+/package-lock.json       export-ignore
+/phpunit.xml.dist        export-ignore
+/.gitattributes          export-ignore

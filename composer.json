@@ -1,0 +1,32 @@
+{
+  "name": "eneuen/module-on-call-calendar",
+  "description": "On-call and shift duty calendar module for MikoPBX",
+  "type": "library",
+  "license": "GPL-3.0-or-later",
+  "require": {
+    "php": ">=8.4"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "Modules\\ModuleOnCallCalendar\\Lib\\": "Lib/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Modules\\ModuleOnCallCalendar\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "lint": "find App Lib Models Setup Messages tests -name '*.php' -print0 | xargs -0 -n1 php -l"
+  },
+  "config": {
+    "sort-packages": true,
+    "platform": {
+      "php": "8.4.0"
+    }
+  }
+}

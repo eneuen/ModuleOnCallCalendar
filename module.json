@@ -1,0 +1,7 @@
+{
+  "developer": "Ethan",
+  "moduleUniqueID": "ModuleOnCallCalendar",
+  "support_email": "",
+  "version": "%ModuleVersion%",
+  "min_pbx_version": "2026.6.34"
+}
