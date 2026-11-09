@@ -67,9 +67,9 @@ final class DutyResolver
      * @param array{
      *     shift_types?: list<array{id: int, start: string, end: string, weekdays: list<int>, sort: int}>,
      *     rosters?: list<array{id: int, priority: int, valid_from: string, valid_until?: string, cycle_weeks: int,
-     *         cells: list<array{shift_type_id: int, week: int, weekday: int, member_id: int}>}>,
+     *         cells: list<array{shift_type_id: int, week: int, weekday: int, member_id: int}>, backup?: string}>,
      *     rotations?: list<array{id: int, priority: int, members: list<int>, first_handover: string, turn_days: int,
-     *         active_hours?: list<array{weekdays: list<int>, start: string, end: string}>, valid_until?: string}>,
+     *         active_hours?: list<array{weekdays: list<int>, start: string, end: string}>, valid_until?: string, backup?: string}>,
      *     overrides?: list<array{id: int, kind: string, start_at: string, end_at: string, members?: list<int>,
      *         destination?: string}>,
      *     members?: array<int, array{name: string, extension: ?string}>
