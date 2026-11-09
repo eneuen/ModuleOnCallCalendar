@@ -37,7 +37,7 @@ npm run build
 
 CI (`.github/workflows/ci.yml`) runs all of the above on every push, runs `npm audit`, and checks that the committed bundles match a fresh build.
 
-Keep code that needs no core classes (the resolver, the publisher's values, the dialplan builder, the editor, the route linker) free of core and Phalcon dependencies, so it stays unit-testable here. Code that needs the MikoPBX core (the hooks, the worker, the AGI script, the controller) is tested on a MikoPBX 2026.6.34 instance, such as the official Docker image `ghcr.io/mikopbx/mikopbx:2026.6.34`, with real calls.
+Keep code that needs no core classes (the resolver, the publisher's values, the dialplan builder, the editor, the route linker) free of core and Phalcon dependencies, so it stays unit-testable here. Code that needs the MikoPBX core (the hooks, the worker, the AGI script, the controller) is tested on a MikoPBX 2026.6.34 instance, such as the official Docker image `ghcr.io/mikopbx/mikopbx:2026.6.34`. [tools/callsim](tools/callsim/README.md) places real SIP calls through such a test PBX with softphones and a fake carrier, and its `probe.py` checks the module end to end: who rings, when the caller is answered, the call records, AstDB and route linking. Run all its scenarios before a release.
 
 ## How a call is routed
 
@@ -81,6 +81,7 @@ Roster and override edits only change AstDB values, so they never reload Asteris
 | `Messages/` | Interface text (English and Russian) |
 | `build/`, `package.json` | Builds the browser assets with esbuild, and the release zip (`build/package.sh`) |
 | `tests/Unit/` | PHPUnit tests that run without a PBX |
+| `tools/callsim/` | Real-call test harness and the module's probe scenarios |
 | `tools/check-banned.php` | Fails the build if shipped code uses a banned function |
 | `tools/phpstan/` | PHPStan setup against the MikoPBX core |
 | `.gitattributes` | Lists the development files that are left out of every release |
