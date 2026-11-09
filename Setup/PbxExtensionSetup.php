@@ -11,6 +11,7 @@ use MikoPBX\Core\System\Directories;
 use MikoPBX\Core\System\SystemMessages;
 use MikoPBX\Core\System\Util;
 use MikoPBX\Modules\Setup\PbxExtensionSetupBase;
+use Modules\ModuleOnCallCalendar\Lib\CallLog;
 use Modules\ModuleOnCallCalendar\Lib\Databases;
 use Modules\ModuleOnCallCalendar\Lib\DialplanBuilder;
 use Modules\ModuleOnCallCalendar\Lib\ScheduleNumbers;
@@ -55,6 +56,7 @@ class PbxExtensionSetup extends PbxExtensionSetupBase
         }
         try {
             Util::getAstManager('off')->sendRequestTimeout('DBDelTree', ['Family' => DialplanBuilder::FAMILY]);
+            Util::getAstManager('off')->sendRequestTimeout('DBDelTree', ['Family' => CallLog::FAMILY]);
         } catch (Throwable $e) {
             SystemMessages::sysLogMsg(static::class, 'Could not clear the AstDB family: ' . $e->getMessage(), LOG_WARNING);
         }

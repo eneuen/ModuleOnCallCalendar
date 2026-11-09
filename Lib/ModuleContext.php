@@ -32,6 +32,17 @@ final class ModuleContext
         return (string)Di::getDefault()->getShared('config')->path('database.dbfile');
     }
 
+    public static function cdrDbFile(): string
+    {
+        return (string)Di::getDefault()->getShared('config')->path('cdrDatabase.dbfile');
+    }
+
+    /** Asterisk's own database file, where AstDB keys live. */
+    public static function astDbFile(): string
+    {
+        return (string)Di::getDefault()->getShared('config')->path('astDatabase.dbfile');
+    }
+
     /**
      * The PBX's time zone, read afresh each time: long-running workers keep
      * the zone they started with, so date_default_timezone_get() can be stale.

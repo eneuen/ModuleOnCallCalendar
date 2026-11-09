@@ -153,7 +153,9 @@ final class DialplanBuilder
             "same => n,GotoIf(\$[\${EPOCH} < 0\${DB($key/until)}]?fresh)",
             'same => n,Set(OCC_START=2)',
             'same => n,AGI(' . self::LOOKUP_AGI . ",$id)",
-            'same => n(fresh),GotoIf($["${OCC_START}" == "out"]?outside)',
+            // A note for the activity report; the worker reads the call's records once it is over (CallLog).
+            'same => n(fresh),Set(DB(' . CallLog::FAMILY . "/$id/\${CHANNEL(linkedid)})=\${EPOCH}|\${OCC_START}|\${OCC_DIAL})",
+            'same => n,GotoIf($["${OCC_START}" == "out"]?outside)',
             'same => n,GotoIf($["${OCC_START}" == "go" & "${OCC_GOTO}x" != "x"]?elsewhere)',
             ...self::callerIdPrefix($s),
             ...self::greeting($s),

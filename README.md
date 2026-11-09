@@ -33,6 +33,8 @@ Open **Modules → On Call Calendar** (administrators, and access groups given r
 
 The home page shows who is on duty on every line right now, who is next, and where nobody is planned.
 
+**Activity.** Each schedule's Activity tab has a report for any period of up to three months: how many calls arrived, how many were answered by the person on duty, by the backup or others, went to voicemail or were not answered, the median time to answer, and per person their hours on duty and the calls they answered. The calls can be exported as CSV. Below it is the change log: who changed what, and when.
+
 **Taking over from a phone.** A member of a schedule can dial **\*22** to be on duty from now until the plan next changes (the next handover or the end of the shift, at most a week), for example to cover a colleague who has to leave early. Someone in several schedules dials \*22 followed by the schedule's number, e.g. \*222202. A beep and "thank you" confirm it; an error tone means they are not a member of that schedule. The take-over appears on the calendar like any other override and can be moved or deleted there.
 
 ## Incoming routes
@@ -49,7 +51,7 @@ Administrators can do everything. Other people can be given access through an ac
 
 | Right | For | Actions to tick |
 | --- | --- | --- |
-| **View** | Staff who go on duty: see who is on duty, the calendar, rosters and the activity log | `index`, `overview`, `schedule`, `calendar`, `options`, `audit` |
+| **View** | Staff who go on duty: see who is on duty, the calendar, rosters, the activity report and the change log | `index`, `overview`, `schedule`, `calendar`, `options`, `report`, `audit` |
 | **Edit duty** | Office managers and team leads: plan who is on duty (with View) | `saveShiftType`, `deleteShiftType`, `orderShiftTypes`, `saveRoster`, `deleteRoster`, `setCell`, `saveRotation`, `deleteRotation`, `orderRules`, `addOverride`, `addSwap`, `updateOverride`, `deleteOverride`, `removeMember` |
 | **Edit settings** | Whoever may change where calls go (with View and Edit duty) | `createSchedule`, `updateSchedule`, `deleteSchedule`, `setRuleBackup`, `linkRoute`, `unlinkRoute`, `testCall` |
 

@@ -1466,9 +1466,12 @@
     return el("div", { class: "ui form occ-rule-backup" }, el("label", { class: "occ-label", text: r.label }), box);
   }
   function renderActivity(body) {
-    fill(body, el("div", { class: "ui active centered inline loader" }));
+    const reportBox = el("div");
+    const logBox = el("div", {}, el("div", { class: "ui active centered inline loader" }));
+    fill(body, reportBox, el("h4", { class: "ui dividing header", text: t("occ_ChangeLog") }), logBox);
+    renderReport(reportBox);
     get("audit", { id: state.scheduleId }).then((data) => {
-      fill(body, data.entries.length ? el(
+      fill(logBox, data.entries.length ? el(
         "table",
         { class: "ui compact table occ-audit" },
         el("thead", {}, el("tr", {}, el("th", { text: t("occ_When") }), el("th", { text: t("occ_Who") }), el("th", { text: t("occ_Change") }))),
@@ -1481,6 +1484,90 @@
         )))
       ) : el("p", { text: t("occ_NoActivity") }));
     });
+  }
+  function renderReport(box) {
+    const today = state.options.today;
+    const shift = (iso, days) => {
+      const d = /* @__PURE__ */ new Date(`${iso}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + days);
+      return d.toISOString().slice(0, 10);
+    };
+    const range = { from: shift(today, -29), to: today };
+    const result = el("div");
+    const load = () => get("report", { id: state.scheduleId, from: range.from, to: shift(range.to, 1) }).then((data) => {
+      const r = data.report;
+      const pct = (n) => r.calls ? `${Math.round(100 * n / r.calls)}%` : "\u2014";
+      const secs = (s) => s === null || s === void 0 ? "\u2014" : sub(t("occ_Seconds"), { n: s });
+      fill(
+        result,
+        el(
+          "div",
+          { class: "ui five small statistics occ-stats" },
+          ["calls", "on_duty", "other", "voicemail", "unanswered"].map((k) => el(
+            "div",
+            { class: "statistic" },
+            el("div", { class: "value", text: k === "calls" ? String(r.calls) : String(r.outcomes[k] || 0) }),
+            el("div", { class: "label", text: k === "calls" ? t("occ_ReportCalls") : `${t(`occ_Outcome_${k}`)} \xB7 ${pct(r.outcomes[k] || 0)}` })
+          ))
+        ),
+        el("p", {}, el("strong", { text: t("occ_MedianWait") }), " ", secs(r.median_wait)),
+        r.people.length ? el(
+          "table",
+          { class: "ui compact table" },
+          el("thead", {}, el("tr", {}, [t("occ_Person"), t("occ_HoursOnDuty"), t("occ_Answered"), t("occ_AnsweredOnDuty"), t("occ_MedianWaitColumn")].map((h) => el("th", { text: h })))),
+          el("tbody", {}, r.people.map((p) => el(
+            "tr",
+            {},
+            el("td", { text: `${p.name || t("occ_UnknownPerson")}${p.extension ? ` (${p.extension})` : ""}` }),
+            el("td", { text: p.hours.toLocaleString(LOCALE) }),
+            el("td", { text: String(p.answered) }),
+            el("td", { text: String(p.answered_on_duty) }),
+            el("td", { text: secs(p.median_wait) })
+          )))
+        ) : el("p", { class: "occ-hint", text: t("occ_NoReportPeople") }),
+        data.calls.length ? button(t("occ_ExportCsv"), () => downloadCsv(data.calls, range), "mini basic", "download") : null
+      );
+    });
+    fill(
+      box,
+      el("h4", { class: "ui dividing header", text: t("occ_Report") }),
+      el("div", { class: "ui form" }, el(
+        "div",
+        { class: "inline fields" },
+        field(t("occ_From"), el("input", { type: "date", value: range.from, oninput: (e) => {
+          range.from = e.target.value;
+        } })),
+        field(t("occ_To"), el("input", { type: "date", value: range.to, oninput: (e) => {
+          range.to = e.target.value;
+        } })),
+        el("div", { class: "field" }, button(t("occ_Show"), load, "basic"))
+      )),
+      el("p", { class: "occ-hint", text: t("occ_ReportHint") }),
+      result
+    );
+    load();
+  }
+  function downloadCsv(calls, range) {
+    const cell = (v) => `"${String(v != null ? v : "").replace(/"/g, '""')}"`;
+    const lines = [[t("occ_When"), t("occ_CsvRouting"), t("occ_OnDuty"), t("occ_CsvOutcome"), t("occ_CsvAnsweredBy"), t("occ_CsvWait")].map(cell).join(",")];
+    calls.forEach((c) => {
+      var _a;
+      return lines.push([
+        wall(c.started_at).replace("T", " "),
+        t(`occ_Start_${c.start}`),
+        c.on_duty,
+        t(`occ_Outcome_${c.outcome}`),
+        c.answered_by || "",
+        (_a = c.wait_seconds) != null ? _a : ""
+      ].map(cell).join(","));
+    });
+    const blob = new Blob([`\uFEFF${lines.join("\r\n")}\r
+`], { type: "text/csv;charset=utf-8" });
+    const link = el("a", { href: URL.createObjectURL(blob), download: `on-call-${state.detail.schedule.number}-${range.from}-${range.to}.csv` });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1e3);
   }
   function auditDetail(e) {
     const before = e.before && typeof e.before === "object" && !Array.isArray(e.before) ? e.before : {};

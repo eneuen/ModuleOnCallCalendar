@@ -60,3 +60,6 @@
 @media (max-width: 767px) {
     .occ-cards.ui.cards > .card { width: 100%; }
 }
+.occ-stats.ui.statistics { margin: .5em 0 1em; flex-wrap: nowrap; }
+.occ-stats.ui.statistics > .statistic { flex: 1 1 0; margin: 0 .5em 1em 0; }
+.occ-stats.ui.statistics .statistic > .label { text-transform: none; }

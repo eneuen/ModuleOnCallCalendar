@@ -18,6 +18,8 @@ use MikoPBX\Core\System\SystemMessages;
 use MikoPBX\Core\Workers\Libs\WorkerModelsEvents\Actions\ReloadDialplanAction;
 use MikoPBX\Core\Workers\WorkerModelsEvents;
 use MikoPBX\PBXCoreREST\Lib\Extensions\DropdownsAction;
+use Modules\ModuleOnCallCalendar\Lib\ActivityReport;
+use Modules\ModuleOnCallCalendar\Lib\CallLog;
 use Modules\ModuleOnCallCalendar\Lib\Databases;
 use Modules\ModuleOnCallCalendar\Lib\DutyResolver;
 use Modules\ModuleOnCallCalendar\Lib\DutySegment;
@@ -60,6 +62,9 @@ class ModuleOnCallCalendarController extends BaseController
     /** The longest range the calendar may ask for. */
     private const int MAX_CALENDAR_DAYS = 62;
 
+    /** The longest range of the activity report. */
+    private const int MAX_REPORT_DAYS = 93;
+
     public function beforeExecuteRoute(Dispatcher $dispatcher): void
     {
         parent::beforeExecuteRoute($dispatcher);
@@ -78,7 +83,8 @@ class ModuleOnCallCalendarController extends BaseController
         $base = 'js/cache/' . OnCallCalendarConf::MODULE_ID;
         $this->assets->collection(AssetProvider::SEMANTIC_UI_CSS)
             ->addCss('css/vendor/semantic/modal.min.css', true)
-            ->addCss('css/vendor/semantic/card.min.css', true);
+            ->addCss('css/vendor/semantic/card.min.css', true)
+            ->addCss('css/vendor/semantic/statistic.min.css', true);
         $this->assets->collection(AssetProvider::SEMANTIC_UI_JS)
             ->addJs('js/vendor/semantic/modal.min.js', true);
         $this->assets->collection(AssetProvider::HEADER_CSS)
@@ -215,6 +221,42 @@ class ModuleOnCallCalendarController extends BaseController
                 // The changes this person may make; the page shows only those controls.
                 'can'              => Rights::writable(fn (string $action): bool => $this->roleMay($this->currentRole(), $action)),
             ] + $this->clock($this->timezone(), time());
+        });
+    }
+
+    /**
+     * GET report: id, from, to ("Y-m-d", to exclusive, up to MAX_REPORT_DAYS).
+     * How the schedule's calls ended, how fast they were answered, and each
+     * person's hours on duty and answered calls; plus the calls themselves,
+     * for the CSV export.
+     */
+    public function reportAction(): void
+    {
+        $this->json(function (): array {
+            [$module, $core, $tz] = [$this->moduleDb(), $this->coreDb(), $this->timezone()];
+            $repository = new ScheduleRepository($module);
+            $id = $this->queryInt('id');
+            $repository->schedule($id) ?? throw new EditorException('occ_ErrNotFound');
+            $from = self::dayStart((string)$this->request->getQuery('from'), $tz);
+            $to = self::dayStart((string)$this->request->getQuery('to'), $tz);
+            if ($to <= $from || $to - $from > self::MAX_REPORT_DAYS * 86400 + 3600) {
+                throw new EditorException('occ_ErrReportRange', ['days' => self::MAX_REPORT_DAYS]);
+            }
+            $directory = Employees::directory($core);
+            $stmt = $module->prepare('SELECT started_at, start, on_duty, outcome, answered_by, wait_seconds FROM ' . CallLog::TABLE
+                . ' WHERE schedule_id = ? AND started_at >= ? AND started_at < ? ORDER BY started_at');
+            $stmt->execute([$id, $from, $to]);
+            $calls = array_map(static fn (array $c): array => [
+                'started_at' => (int)$c['started_at'], 'start' => (string)$c['start'], 'on_duty' => (string)$c['on_duty'],
+                'outcome' => (string)$c['outcome'], 'answered_by' => $c['answered_by'] === null ? null : (string)$c['answered_by'],
+                'wait_seconds' => $c['wait_seconds'] === null ? null : (int)$c['wait_seconds'],
+            ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+            $segments = (new DutyResolver($repository->plan($id, $directory), $tz))->segments($from, $to);
+
+            return [
+                'report' => ActivityReport::build($calls, $segments, $repository->members($id, $directory), $directory),
+                'calls'  => $calls,
+            ];
         });
     }
 

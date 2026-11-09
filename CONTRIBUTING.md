@@ -60,6 +60,8 @@ A route's own dial timeout still limits the unanswered chain, which is why linki
 
 Roster and override edits only change AstDB values, so they never reload Asterisk. A schedule's number or chain changes reload the dialplan.
 
+When a call reaches a schedule, the dialplan also notes it in AstDB (family `OnCallCalendarCalls`: time, how the schedule decided, who was rung). Every 30 seconds the worker asks Asterisk which calls still have channels, reads the call records of the ones that are over, stores how each ended in `m_Calls` (`Lib/CallLog`) and deletes the note.
+
 The worker writes all of a schedule's keys every minute and checks each write. When an answer changes, it sets `until` to 0 first and writes it last, so a call arriving mid-write asks the live lookup instead of mixing the old and new answer.
 
 ## Changing the database
@@ -82,6 +84,7 @@ The core creates the module's tables from the model annotations in `Models/` on 
 | `Lib/RouteLinker.php` | Linking and unlinking incoming routes, and what else routes to a number |
 | `Lib/BackupSpec.php` | A roster's or rotation's own backup, as published in AstDB |
 | `Lib/ScheduleNumbers.php` | The schedules' numbers in the core's extensions table |
+| `Lib/CallLog.php`, `Lib/ActivityReport.php` | The call log (notes from the dialplan, read back from the call records once a call is over) and the activity report |
 | `Lib/ScheduleStatus.php` | The home page's now, next and coverage |
 | `Lib/Rights.php` | The page's actions grouped into View, Edit duty and Edit settings |
 | `Models/` | Tables in the module's database |

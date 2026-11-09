@@ -22,6 +22,8 @@ require_once 'Globals.php';
  * - At start: clears the module's AstDB family and publishes every schedule.
  * - Every PUBLISH_EVERY seconds, and as soon as an answer is about to change
  *   (the earliest "until"), it publishes again.
+ * - Every HARVEST_EVERY seconds, calls that are over move from their AstDB
+ *   notes into the call log for the activity report (CallLog).
  * - A message on OnCallCalendarConf::COMMANDS_TUBE (sent after every save on
  *   the module page; the web process has no AMI connection) publishes at once.
  *
@@ -31,6 +33,13 @@ require_once 'Globals.php';
 class WorkerOnCallCalendar extends WorkerBase
 {
     private const int PUBLISH_EVERY = 60;
+
+    /** How often finished calls are moved from AstDB notes into the call log. */
+    private const int HARVEST_EVERY = 30;
+
+    private int $nextHarvest = 0;
+
+    private string $lastPrune = '';
 
     /** @var array<int, array<string, string>> what is in AstDB now, by schedule id */
     private array $published = [];
@@ -48,6 +57,9 @@ class WorkerOnCallCalendar extends WorkerBase
             $client->wait(1);
             if (time() >= $this->nextPublish) {
                 $this->publish();
+            }
+            if (time() >= $this->nextHarvest) {
+                $this->harvestCalls();
             }
         }
     }
@@ -122,6 +134,52 @@ class WorkerOnCallCalendar extends WorkerBase
             SystemMessages::sysLogMsg(static::class, 'Publishing who is on duty failed: ' . $e->getMessage(), LOG_ERR);
             $this->published = [];
             $this->nextPublish = $now + 10;
+        }
+    }
+
+    /**
+     * Moves the calls that are over from their AstDB notes into the call log
+     * (CallLog). A call counts as over only when Asterisk confirms it has no
+     * channel left; if Asterisk can't be asked, nothing is harvested.
+     */
+    private function harvestCalls(): void
+    {
+        $now = time();
+        $this->nextHarvest = $now + self::HARVEST_EVERY;
+        try {
+            $notes = CallLog::pending(Databases::openReadOnly(ModuleContext::astDbFile()));
+            $module = Databases::openWritable(ModuleContext::moduleDbFile());
+            if ($this->lastPrune !== date('Y-m-d')) {
+                $this->lastPrune = date('Y-m-d');
+                CallLog::prune($module, $now);
+            }
+            if ($notes === []) {
+                return;
+            }
+            $ami = Util::getAstManager('off');
+            $channels = $ami->sendRequestTimeout('CoreShowChannels');
+            if (strcasecmp((string)($channels['Response'] ?? ''), 'Success') !== 0) {
+                return;
+            }
+            $active = [];
+            foreach ($channels['data']['CoreShowChannel'] ?? [] as $channel) {
+                if (isset($channel['Linkedid'])) {
+                    $active[(string)$channel['Linkedid']] = true;
+                }
+            }
+            $cdr = Databases::openReadOnly(ModuleContext::cdrDbFile());
+            $legsOf = static function (string $linkedId) use ($cdr): array {
+                $stmt = $cdr->prepare('SELECT dst_num, disposition, start, answer, is_app FROM cdr_general WHERE linkedid = ? ORDER BY id');
+                $stmt->execute([$linkedId]);
+
+                return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            };
+            $core = Databases::openReadOnly(ModuleContext::coreDbFile());
+            foreach (CallLog::harvest($module, $notes, $active, $legsOf, ModuleContext::timezone($core), $now) as $key) {
+                $ami->sendRequestTimeout('DBDel', ['Family' => CallLog::FAMILY, 'Key' => $key]);
+            }
+        } catch (Throwable $e) {
+            SystemMessages::sysLogMsg(static::class, 'Reading finished calls failed: ' . $e->getMessage(), LOG_WARNING);
         }
     }
 

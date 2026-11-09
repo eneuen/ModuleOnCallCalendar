@@ -66,6 +66,7 @@ A run prints PASS or FAIL for every check and ends with a summary; it exits with
 | `expired_answer_live_lookup` | With the published answer expired, the live lookup decides from the plan |
 | `greeting_keeps_call_unanswered` | The greeting plays without answering the caller |
 | `rule_backup_replaces_schedule_backup` | A roster's own backup (a person, or none) replaces the schedule's queue backup |
+| `activity_report` | Calls answered on duty, sent to voicemail and given up are logged with who answered and how fast |
 | `takeover_by_phone` | A member's \*22 puts them on duty and they get the next call; a non-member's changes nothing |
 | `caller_name_prefix` | The phone on duty shows the schedule's prefix before the caller's name |
 | `test_call` | The page's test call rings the chosen phone first, then the schedule |

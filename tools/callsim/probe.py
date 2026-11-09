@@ -127,6 +127,33 @@ class Probe:
             self.page.post("removeMember", {"id": self.id, "member_id": m["id"]})
         settings.update(chain)
         self.page.post("updateSchedule", settings)
+        self.wait_chain(settings)
+
+    def wait_chain(self, settings, timeout=30):
+        """Waits until the reloaded dialplan has this chain: each save reloads it in the background."""
+        expect = [f"Dial(${{OCC_DIAL}},{settings['ring_seconds']}"]
+        if settings["backup_type"] == "member":
+            expect.append(f"Set(OCC_BACKUP=Local/{next(e for e, u in self.users.items() if u == settings['backup_user_id'])}@")
+        elif settings["backup_type"] == "queue":
+            expect.append(f"Goto(internal,{settings['backup_number']},1)")
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            plan = docker("exec", PBX_CONTAINER, "asterisk", "-rx", f"dialplan show {PROBE_NUMBER}@internal", capture=True)
+            stray = settings["backup_type"] != "member" and "Set(OCC_BACKUP=Local/" in plan
+            if all(e in plan for e in expect) and not stray:
+                return
+            time.sleep(1)
+        raise RuntimeError(f"the dialplan doesn't show the chain {expect} after {timeout} s")
+
+    def wait_calls_logged(self, timeout=120):
+        """Waits until no call to the probe schedule is still waiting to be logged."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            out = docker("exec", PBX_CONTAINER, "asterisk", "-rx", f"database show OnCallCalendarCalls/{self.id}", capture=True)
+            if f"/OnCallCalendarCalls/{self.id}/" not in out:
+                return
+            time.sleep(3)
+        raise RuntimeError("calls still waiting to be logged")
 
     def roster_today(self, *extensions):
         """A 24-hour shift every day, with these people in today's cell (none: an empty cell, a gap)."""
@@ -516,6 +543,38 @@ def takeover_by_phone(p, c):
     overrides = p.page.get("calendar", id=p.id, **{"from": datetime.now(p.tz).strftime("%Y-%m-%d"),
                                                    "to": (datetime.now(p.tz) + timedelta(days=1)).strftime("%Y-%m-%d")})["overrides"]
     c.that(any(o["kind"] == "takeover" and o["note"] == "*22" for o in overrides), "the take-over is on the calendar")
+
+
+@scenario("Activity report: an answered call, one to voicemail and one the caller gives up on are logged after they "
+          "end, with who answered and how fast.")
+def activity_report(p, c):
+    p.reset(ring_seconds=5)
+    p.override("cover", "302")
+    p.wait_published("1", dial_of("302"))
+    today = datetime.now(p.tz).strftime("%Y-%m-%d")
+    tomorrow = (datetime.now(p.tz) + timedelta(days=1)).strftime("%Y-%m-%d")
+    report = lambda: p.page.get("report", id=p.id, **{"from": today, "to": tomorrow})
+    p.wait_calls_logged()  # earlier scenarios' calls first
+    before = report()["report"]
+
+    a, b2 = Line("305"), Line("302")
+    a.dial(PROBE_NUMBER); b2.ringing(8); pause(2); b2.answer(); a.established(); pause(2); a.hangup(); b2.closed()
+    a = Line("305")
+    a.dial(PROBE_NUMBER); a.established(15); pause(2); a.hangup(); pause(1)
+    a, b2 = Line("305"), Line("302")
+    a.dial(PROBE_NUMBER); b2.ringing(8); pause(2); a.hangup(); pause(1)
+
+    deadline = time.time() + 120
+    after = report()["report"]
+    while after["calls"] < before["calls"] + 3 and time.time() < deadline:
+        time.sleep(5)
+        after = report()["report"]
+    delta = {k: after["outcomes"][k] - before["outcomes"][k] for k in after["outcomes"]}
+    c.that(after["calls"] - before["calls"] == 3, f"3 calls logged ({after['calls'] - before['calls']})")
+    c.that(delta == {"on_duty": 1, "other": 0, "voicemail": 1, "unanswered": 1}, f"outcomes {delta}")
+    person = next((x for x in after["people"] if x["extension"] == "302"), None)
+    c.that(person is not None and person["answered_on_duty"] >= 1 and person["hours"] > 0,
+           f"302 answered on duty and has hours on duty ({person})")
 
 
 @scenario("Test call from the page: 305 rings first; once answered, the schedule's chain rings 303.")

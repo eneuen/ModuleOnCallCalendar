@@ -23,7 +23,7 @@ namespace Modules\ModuleOnCallCalendar\Lib;
  */
 final class Rights
 {
-    public const array VIEW = ['index', 'overview', 'schedule', 'calendar', 'options', 'audit'];
+    public const array VIEW = ['index', 'overview', 'schedule', 'calendar', 'options', 'report', 'audit'];
 
     public const array EDIT_DUTY = [
         'saveShiftType', 'deleteShiftType', 'orderShiftTypes', 'saveRoster', 'deleteRoster', 'setCell',
