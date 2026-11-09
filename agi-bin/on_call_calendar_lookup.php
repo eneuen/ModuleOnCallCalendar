@@ -8,7 +8,7 @@
  * when the answer in AstDB is missing or expired (the module's worker keeps
  * it fresh), so normally no PHP runs during a call.
  *
- * Argument: the schedule id. Sets OCC_START, OCC_DIAL and OCC_GOTO on the
+ * Argument: the schedule id. Sets OCC_START, OCC_DIAL, OCC_GOTO and OCC_BSPEC on the
  * channel. On any error it sets nothing, and the dialplan treats the call as
  * a gap: the backup, then the final destination.
  */
@@ -37,6 +37,7 @@ try {
         $agi->set_variable('OCC_START', $values['start']);
         $agi->set_variable('OCC_DIAL', $values['dial']);
         $agi->set_variable('OCC_GOTO', $values['goto']);
+        $agi->set_variable('OCC_BSPEC', $values['backup']);
     }
 } catch (Throwable $e) {
     SystemMessages::sysLogMsg('OnCallCalendar', 'Live duty lookup failed: ' . $e->getMessage(), LOG_ERR);

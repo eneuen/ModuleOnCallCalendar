@@ -249,4 +249,9 @@ return [
     'occ_CallerIdPrefix' => 'Caller Name Prefix',
     'occ_CallerIdPrefixHint' => 'Shown before the caller\'s name on the phones this schedule rings, e.g. SERVICE, so whoever answers knows which line it is. Letters, digits and spaces.',
     'occ_ErrPrefix' => 'The prefix can have up to 20 letters, digits and spaces.',
+    'occ_RuleBackups' => 'Backup per Roster and Rotation',
+    'occ_RuleBackupsHint' => 'While a roster or rotation decides who is on duty, its own backup can replace the schedule\'s, for example a night rotation with no backup on a line whose daytime roster falls back to the reception queue.',
+    'occ_BackupSameAsSchedule' => 'Same as the schedule',
+    'occ_BackupNoneRule' => 'No backup: straight to the final destination',
+    'occ_Audit_rule_backup' => 'Backup of a roster or rotation changed',
 ];

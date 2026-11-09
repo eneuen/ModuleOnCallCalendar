@@ -76,6 +76,16 @@ final class RouteLinkerTest extends TestCase
         self::assertArrayNotHasKey(1, $routes);
     }
 
+    public function testTheLongestRuleBackupCountsToo(): void
+    {
+        $schedule = $this->schedule(['backup_type' => 'member', 'backup_user_id' => 111, 'backup_ring_seconds' => 15]);
+        $roster = (new ScheduleRepository($this->module))->rosters($schedule['id'])[0]['id'];
+        (new ScheduleEditor($this->module, $this->core, 'admin', self::NOW))->setRuleBackup($schedule['id'],
+            ['rule' => 'roster', 'rule_id' => $roster, 'backup_type' => 'queue', 'backup_number' => '2000']);
+
+        self::assertSame(20 + 60 + RouteLinker::TIMEOUT_MARGIN, $this->linker()->neededTimeout($schedule));
+    }
+
     public function testQueueBackupCountsTheQueueWait(): void
     {
         $schedule = $this->schedule(['backup_type' => 'queue', 'backup_number' => '2000']);

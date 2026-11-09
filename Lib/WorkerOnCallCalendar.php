@@ -145,7 +145,7 @@ class WorkerOnCallCalendar extends WorkerBase
         if ($changed && !$put('until', '0')) {
             return false;
         }
-        foreach (['start', 'dial', 'goto'] as $key) {
+        foreach (['start', 'dial', 'goto', 'backup'] as $key) {
             if (!$put($key, (string)$keys[$key])) {
                 $put('until', '0');
 

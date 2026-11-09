@@ -384,6 +384,37 @@ final class ScheduleEditorTest extends TestCase
         $this->editor->addOverride($id, ['kind' => 'cover', 'start_at' => '2026-11-11 12:00', 'end_at' => '2026-11-11 12:00', 'user_ids' => [110]]);
     }
 
+    /** Scenario 3: a clinic line, receptionists by day falling back to the queue, a doctor at night with no backup. */
+    public function testEachRuleCanHaveItsOwnBackup(): void
+    {
+        $id = $this->shiftSchedule();
+        $roster = $this->repository()->rosters($id)[0]['id'];
+        [$morning] = array_column($this->repository()->shiftTypes($id), 'id');
+        $this->editor->setCell($id, $roster, $morning, 1, 3, [110]);
+        $night = $this->editor->saveRotation($id, ['user_ids' => [112], 'first_handover' => '2026-11-01 18:00', 'turn_days' => 7,
+            'active_hours' => [['weekdays' => [1, 2, 3, 4, 5, 6, 7], 'start' => '18:00', 'end' => '08:00']]]);
+        $this->editor->setRuleBackup($id, ['rule' => 'rotation', 'rule_id' => $night, 'backup_type' => 'none']);
+
+        self::assertSame('', $this->resolveAt($id, '2026-11-11 09:00')->backup);
+        self::assertSame('none', $this->resolveAt($id, '2026-11-11 23:00')->backup);
+
+        $this->editor->setRuleBackup($id, ['rule' => 'rotation', 'rule_id' => $night, 'backup_type' => 'member',
+            'backup_user_id' => 111, 'backup_ring_seconds' => 30]);
+        self::assertSame('dial|30|Local/202@internal-users/n', $this->resolveAt($id, '2026-11-11 23:00')->backup);
+        // Ben is now the night backup, so he can't be removed from the schedule.
+        $ben = array_values(array_filter($this->repository()->members($id, []), static fn (array $m): bool => $m['user_id'] === 111))[0];
+        try {
+            $this->editor->removeMember($id, $ben['id']);
+            self::fail('A rule backup person was removed');
+        } catch (EditorException $e) {
+            self::assertSame('occ_ErrMemberInUse', $e->key);
+        }
+        self::assertSame('rule.backup', $this->module->query('SELECT action FROM m_Audit ORDER BY id DESC')->fetchColumn());
+
+        $this->expectRefusal('occ_ErrBackupQueue');
+        $this->editor->setRuleBackup($id, ['rule' => 'roster', 'rule_id' => $roster, 'backup_type' => 'queue', 'backup_number' => '2003']);
+    }
+
     public function testRuleOrder(): void
     {
         $id = $this->shiftSchedule();

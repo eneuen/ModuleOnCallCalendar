@@ -16,7 +16,8 @@ namespace Modules\ModuleOnCallCalendar\Lib;
  * - START_ELSEWHERE: a "send elsewhere" override: $destination.
  *
  * $memberIds lists who was planned, including people whose extension is
- * gone (they are left out of $targets).
+ * gone (they are left out of $targets). $backup is the deciding rule's own
+ * backup (see BackupSpec); empty means the schedule's backup.
  */
 final readonly class DutySegment
 {
@@ -33,6 +34,7 @@ final readonly class DutySegment
         public array $memberIds = [],
         public array $targets = [],
         public string $destination = '',
+        public string $backup = '',
     ) {
     }
 
@@ -43,12 +45,14 @@ final readonly class DutySegment
             && $this->sourceId === $other->sourceId
             && $this->memberIds === $other->memberIds
             && $this->targets === $other->targets
-            && $this->destination === $other->destination;
+            && $this->destination === $other->destination
+            && $this->backup === $other->backup;
     }
 
     public function extendedTo(int $to): self
     {
-        return new self($this->from, $to, $this->start, $this->decidedBy, $this->sourceId, $this->memberIds, $this->targets, $this->destination);
+        return new self($this->from, $to, $this->start, $this->decidedBy, $this->sourceId, $this->memberIds, $this->targets,
+            $this->destination, $this->backup);
     }
 
     /** The step-1 dial string: every target through the core's extension dialplan. */
@@ -63,7 +67,7 @@ final readonly class DutySegment
         return [
             'from' => $this->from, 'to' => $this->to, 'start' => $this->start, 'decided_by' => $this->decidedBy,
             'source_id' => $this->sourceId, 'member_ids' => $this->memberIds, 'targets' => $this->targets,
-            'destination' => $this->destination,
+            'destination' => $this->destination, 'backup' => $this->backup,
         ];
     }
 }

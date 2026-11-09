@@ -65,6 +65,8 @@ A run prints PASS or FAIL for every check and ends with a summary; it exits with
 | `transfer_to_schedule` | A blind transfer to the schedule's number rings the person on duty |
 | `expired_answer_live_lookup` | With the published answer expired, the live lookup decides from the plan |
 | `greeting_keeps_call_unanswered` | The greeting plays without answering the caller |
+| `rule_backup_replaces_schedule_backup` | A roster's own backup (a person, or none) replaces the schedule's queue backup |
+| `caller_name_prefix` | The phone on duty shows the schedule's prefix before the caller's name |
 | `test_call` | The page's test call rings the chosen phone first, then the schedule |
 | `link_unlink_restores_route` | Linking points a route at the schedule and raises its timeout; unlinking restores both |
 | `delete_refused_while_routed` | A schedule can't be deleted while a route set by hand points at it |

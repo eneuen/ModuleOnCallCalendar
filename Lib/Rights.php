@@ -31,7 +31,7 @@ final class Rights
         'removeMember',
     ];
 
-    public const array EDIT_SETTINGS = ['createSchedule', 'updateSchedule', 'deleteSchedule', 'linkRoute', 'unlinkRoute', 'testCall'];
+    public const array EDIT_SETTINGS = ['createSchedule', 'updateSchedule', 'deleteSchedule', 'setRuleBackup', 'linkRoute', 'unlinkRoute', 'testCall'];
 
     /**
      * Which change actions a role may use, for the page to show only the

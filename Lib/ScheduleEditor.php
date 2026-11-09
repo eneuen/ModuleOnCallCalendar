@@ -443,6 +443,54 @@ final class ScheduleEditor
     }
 
     /**
+     * Gives a roster or rotation its own backup, used instead of the
+     * schedule's while that rule decides who is on duty (for example a
+     * night rotation with no backup on a line whose daytime roster falls
+     * back to the reception queue). DIALPLAN_RELOAD is not needed: the
+     * worker publishes it. PUBLISH.
+     *
+     * @param array<string, mixed> $data rule ('roster' or 'rotation'), rule_id, backup_type ('' = the schedule's,
+     *     none, member, queue), backup_number, backup_user_id, backup_ring_seconds
+     */
+    public function setRuleBackup(int $scheduleId, array $data): void
+    {
+        $table = match ((string)($data['rule'] ?? '')) {
+            'roster' => ScheduleRepository::ROSTERS,
+            'rotation' => ScheduleRepository::ROTATIONS,
+            default => throw new EditorException('occ_ErrInvalid'),
+        };
+        $ruleId = (int)($data['rule_id'] ?? 0);
+        $before = $this->requireRow($table, $ruleId, $scheduleId);
+        $type = (string)($data['backup_type'] ?? '');
+        if (!in_array($type, ['', 'none', 'member', 'queue'], true)) {
+            throw new EditorException('occ_ErrInvalid');
+        }
+        $number = '';
+        $user = null;
+        $ring = null;
+        if ($type === 'queue') {
+            $number = (string)($data['backup_number'] ?? '');
+            if ($this->coreExtensionType($number) !== 'QUEUE') {
+                throw new EditorException('occ_ErrBackupQueue');
+            }
+        } elseif ($type === 'member') {
+            $user = (int)($data['backup_user_id'] ?? 0);
+            if ($this->extensionOf($user) === null) {
+                throw new EditorException('occ_ErrNoExtension');
+            }
+            $ring = self::ringSeconds($data['backup_ring_seconds'] ?? 20);
+        }
+        $this->transaction(function () use ($scheduleId, $table, $ruleId, $type, $number, $user, $ring, $before): void {
+            if ($user !== null) {
+                $this->memberId($scheduleId, $user);
+            }
+            $this->module->prepare("UPDATE $table SET backup_type = ?, backup_number = ?, backup_user_id = ?, backup_ring_seconds = ? WHERE id = ?")
+                ->execute([$type, $number, $user, $ring, $ruleId]);
+            $this->audit($scheduleId, 'rule.backup', $before, $this->row($table, $ruleId));
+        });
+    }
+
+    /**
      * @param array<string, mixed> $data
      */
     private function writeRotation(int $scheduleId, ?int $id, array $data): int
@@ -697,6 +745,12 @@ final class ScheduleEditor
         $userId = (int)$this->value('SELECT user_id FROM ' . ScheduleRepository::MEMBERS . ' WHERE id = ?', [$memberId]);
         if ((string)$schedule['backup_type'] === 'member' && (int)$schedule['backup_user_id'] === $userId) {
             return true;
+        }
+        foreach ([ScheduleRepository::ROSTERS, ScheduleRepository::ROTATIONS] as $table) {
+            if ($this->value("SELECT 1 FROM $table WHERE schedule_id = ? AND backup_type = 'member' AND backup_user_id = ? LIMIT 1",
+                [$scheduleId, $userId]) !== null) {
+                return true;
+            }
         }
         if ($this->value('SELECT 1 FROM ' . ScheduleRepository::ROSTER_CELLS . ' WHERE member_id = ? LIMIT 1', [$memberId]) !== null) {
             return true;

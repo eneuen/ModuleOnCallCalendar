@@ -49,7 +49,7 @@ final class ModuleContext
     /**
      * The AstDB values for every enabled schedule (or only $only), right now.
      *
-     * @return array<int, array{start: string, dial: string, goto: string, until: string}>
+     * @return array<int, array{start: string, dial: string, goto: string, backup: string, until: string}>
      */
     public static function currentValues(PDO $module, PDO $core, int $now, ?int $only = null): array
     {

@@ -27,6 +27,10 @@ use Throwable;
  *     starts at the backup.
  *  3. Otherwise t is outside covered hours.
  *
+ * A roster or rotation may carry its own backup ("backup", a BackupSpec
+ * string); while it decides (someone on duty, or a gap in it) that backup
+ * replaces the schedule's.
+ *
  * All times in the plan are wall-clock times in the PBX's time zone:
  * - A shift belongs to the day it starts; one that ends at or before its
  *   start time ends the next day (start = end means 24 hours). On
@@ -153,7 +157,7 @@ final class DutyResolver
         }
         $start = $targets === [] ? self::START_GAP : self::START_ON_DUTY;
 
-        return new DutySegment($a, $b, $start, $winner['by'], $winner['id'], $memberIds, $targets);
+        return new DutySegment($a, $b, $start, $winner['by'], $winner['id'], $memberIds, $targets, '', (string)($winner['backup'] ?? ''));
     }
 
     /**
@@ -235,7 +239,7 @@ final class DutyResolver
                     $items[] = [
                         'from' => $span[0], 'to' => $span[1], 'by' => self::BY_ROSTER, 'id' => (int)$roster['id'],
                         'kind' => '', 'members' => $cells[(int)$shift['id']][$week][$weekday] ?? [],
-                        'priority' => (int)$roster['priority'], 'sort' => (int)$shift['sort'],
+                        'priority' => (int)$roster['priority'], 'sort' => (int)$shift['sort'], 'backup' => (string)($roster['backup'] ?? ''),
                     ];
                 }
             }
@@ -277,6 +281,7 @@ final class DutyResolver
                     $items[] = [
                         'from' => $a, 'to' => $b, 'by' => self::BY_ROTATION, 'id' => (int)$rotation['id'],
                         'kind' => '', 'members' => [$member], 'priority' => (int)$rotation['priority'], 'sort' => 0,
+                        'backup' => (string)($rotation['backup'] ?? ''),
                     ];
                 }
             }

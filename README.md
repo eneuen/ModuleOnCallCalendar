@@ -49,7 +49,7 @@ Administrators can do everything. Other people can be given access through an ac
 | --- | --- | --- |
 | **View** | Staff who go on duty: see who is on duty, the calendar, rosters and the activity log | `index`, `overview`, `schedule`, `calendar`, `options`, `audit` |
 | **Edit duty** | Office managers and team leads: plan who is on duty (with View) | `saveShiftType`, `deleteShiftType`, `orderShiftTypes`, `saveRoster`, `deleteRoster`, `setCell`, `saveRotation`, `deleteRotation`, `orderRules`, `addOverride`, `addSwap`, `updateOverride`, `deleteOverride`, `removeMember` |
-| **Edit settings** | Whoever may change where calls go (with View and Edit duty) | `createSchedule`, `updateSchedule`, `deleteSchedule`, `linkRoute`, `unlinkRoute`, `testCall` |
+| **Edit settings** | Whoever may change where calls go (with View and Edit duty) | `createSchedule`, `updateSchedule`, `deleteSchedule`, `setRuleBackup`, `linkRoute`, `unlinkRoute`, `testCall` |
 
 Edit duty changes who answers, never where calls can go: people are always employees with an extension, and "send elsewhere" only offers the schedule's own destinations. The page shows each person only the controls their rights allow, and the module checks every request again.
 

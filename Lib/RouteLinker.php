@@ -75,24 +75,46 @@ final class RouteLinker
 
     /**
      * How long a route must keep the call for this schedule's chain:
-     * step 1, plus a person backup's ring time or a queue's wait, plus a
-     * margin.
+     * step 1, plus the longest backup (the schedule's or a rule's: a
+     * person's ring time or a queue's wait), plus a margin.
      *
      * @param array<string, mixed> $schedule
      */
     public function neededTimeout(array $schedule): int
     {
-        $seconds = (int)$schedule['ring_seconds'];
-        if ((string)$schedule['backup_type'] === 'member') {
-            $seconds += (int)$schedule['backup_ring_seconds'];
-        } elseif ((string)$schedule['backup_type'] === 'queue') {
-            $stmt = $this->core->prepare('SELECT timeout_to_redirect_to_extension FROM m_CallQueues WHERE extension = ?');
-            $stmt->execute([(string)$schedule['backup_number']]);
-            $wait = (int)$stmt->fetchColumn();
-            $seconds += $wait > 0 ? $wait : self::QUEUE_DEFAULT_WAIT;
+        // The longest backup: the schedule's own, or a roster's or rotation's that replaces it.
+        $backup = $this->backupSeconds($schedule);
+        foreach ([ScheduleRepository::ROSTERS, ScheduleRepository::ROTATIONS] as $table) {
+            $stmt = $this->module->prepare("SELECT backup_type, backup_number, backup_ring_seconds FROM $table WHERE schedule_id = ?");
+            $stmt->execute([(int)$schedule['id']]);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $rule) {
+                $backup = max($backup, $this->backupSeconds($rule));
+            }
         }
 
-        return $seconds + self::TIMEOUT_MARGIN;
+        return (int)$schedule['ring_seconds'] + $backup + self::TIMEOUT_MARGIN;
+    }
+
+    /**
+     * How long a backup can hold the call: a person's ring time, or a
+     * queue's wait.
+     *
+     * @param array<string, mixed> $backup backup_type, backup_number, backup_ring_seconds
+     */
+    private function backupSeconds(array $backup): int
+    {
+        if ((string)($backup['backup_type'] ?? '') === 'member') {
+            return (int)($backup['backup_ring_seconds'] ?? 0);
+        }
+        if ((string)($backup['backup_type'] ?? '') === 'queue') {
+            $stmt = $this->core->prepare('SELECT timeout_to_redirect_to_extension FROM m_CallQueues WHERE extension = ?');
+            $stmt->execute([(string)$backup['backup_number']]);
+            $wait = (int)$stmt->fetchColumn();
+
+            return $wait > 0 ? $wait : self::QUEUE_DEFAULT_WAIT;
+        }
+
+        return 0;
     }
 
     /**

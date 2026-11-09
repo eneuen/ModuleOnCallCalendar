@@ -19,6 +19,8 @@ namespace Modules\ModuleOnCallCalendar\Lib;
  *   <id>/start  where the call starts: 1 (on duty), 2 (gap: backup), out
  *               (outside covered hours) or go (a "send elsewhere" override)
  *   <id>/goto   for go: the number to send the call to
+ *   <id>/backup the deciding roster's or rotation's own backup (BackupSpec);
+ *               empty for the schedule's backup
  *   <id>/until  epoch seconds after which the answer is stale
  *
  * DutyPublisher writes these values. A stale or missing answer is asked
@@ -113,6 +115,7 @@ final class DialplanBuilder
             "same => n,Set(OCC_START=\${DB($key/start)})",
             "same => n,Set(OCC_DIAL=\${DB($key/dial)})",
             "same => n,Set(OCC_GOTO=\${DB($key/goto)})",
+            "same => n,Set(OCC_BSPEC=\${DB($key/backup)})",
             // A stale or missing answer: ask the AGI fallback; if that fails it stays a gap.
             "same => n,GotoIf(\$[\${EPOCH} < 0\${DB($key/until)}]?fresh)",
             'same => n,Set(OCC_START=2)',
@@ -125,6 +128,8 @@ final class DialplanBuilder
             ...self::ringWithoutForwarding('OCC_DIAL', $ring, $ringback, 'duty'),
             'same => n,GotoIf($["${DIALSTATUS}" == "ANSWER"]?done)',
             'same => n(backup),NoOp(On-call schedule ' . $id . ': backup)',
+            ...self::ruleBackup($ringback),
+            'same => n(bdefault),NoOp()',
             ...self::backup($s),
             "same => n(final),Goto(internal,$final,1)",
             "same => n(outside),Goto(internal,$outside,1)",
@@ -163,6 +168,33 @@ final class DialplanBuilder
     }
 
     /**
+     * The deciding rule's own backup, read from AstDB with the rest of the
+     * answer (OCC_BSPEC, see BackupSpec): none goes straight to the final
+     * destination, queue|<n> hands the call to the queue, dial|<s>|<legs>
+     * rings that person for s seconds. Empty falls through to the
+     * schedule's own backup (bdefault). The worker validates the spec; the
+     * queue number is checked again here.
+     *
+     * @return list<string>
+     */
+    private static function ruleBackup(bool $ringback): array
+    {
+        return [
+            'same => n,GotoIf($["${OCC_BSPEC}x" == "x"]?bdefault)',
+            'same => n,GotoIf($["${OCC_BSPEC}" == "none"]?final)',
+            'same => n,Set(OCC_BKIND=${CUT(OCC_BSPEC,|,1)})',
+            'same => n,GotoIf($["${OCC_BKIND}" == "queue" & ${REGEX("^[0-9]+$" ${CUT(OCC_BSPEC,|,2)})}]?bqueue)',
+            'same => n,GotoIf($["${OCC_BKIND}" != "dial"]?bdefault)',
+            'same => n,Set(OCC_BRING=${CUT(OCC_BSPEC,|,2)})',
+            'same => n,Set(OCC_BACKUP=${CUT(OCC_BSPEC,|,3)})',
+            ...self::ringWithoutForwarding('OCC_BACKUP', '${OCC_BRING}', $ringback, 'rule'),
+            'same => n,GotoIf($["${DIALSTATUS}" == "ANSWER"]?done)',
+            'same => n,Goto(final)',
+            'same => n(bqueue),Goto(internal,${CUT(OCC_BSPEC,|,2)},1)',
+        ];
+    }
+
+    /**
      * Rings the dial string in channel variable $dialVar (Local/<ext>@internal-users/n
      * legs joined by &) through [internal-users], with each employee's own
      * forwarding turned off for this call only:
@@ -178,7 +210,7 @@ final class DialplanBuilder
      *
      * @return list<string>
      */
-    private static function ringWithoutForwarding(string $dialVar, int $seconds, bool $ringback, string $label): array
+    private static function ringWithoutForwarding(string $dialVar, int|string $seconds, bool $ringback, string $label): array
     {
         return [
             'same => n,Set(__FW_DISABLE=1)',

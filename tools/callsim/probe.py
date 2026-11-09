@@ -133,6 +133,7 @@ class Probe:
         roster = self.page.post("saveRoster", {"id": self.id, "roster": {"valid_from": str(monday), "valid_until": "", "cycle_weeks": 1}})["id"]
         self.page.post("setCell", {"id": self.id, "roster_id": roster, "shift_type_id": shift, "week": 1,
                                    "weekday": today.isoweekday(), "user_ids": self.ids(*extensions)})
+        return roster
 
     def override(self, kind, *extensions, destination=""):
         """An override from 30 minutes ago to an hour from now."""
@@ -426,6 +427,54 @@ def greeting_keeps_call_unanswered(p, c):
     c.that(rang(b1, 15), "301 rings after the greeting")
     c.that(not answered(caller, 2), "the caller is not answered before 301 picks up")
     b1.answer(); c.that(answered(caller, 5), "the caller is connected"); pause(2); caller.hangup(); b1.closed(); pause(2)
+
+
+@scenario("A roster's own backup replaces the schedule's: 301 rings, then the roster's backup 304 instead of the "
+          "schedule's queue; with the roster's backup set to none, the call goes straight to voicemail.")
+def rule_backup_replaces_schedule_backup(p, c):
+    p.reset(ring_seconds=6, backup_type="queue", backup_number=QUEUE)
+    roster = p.roster_today("301")
+    p.page.post("setRuleBackup", {"id": p.id, "rule": "roster", "rule_id": roster, "backup_type": "member",
+                                  "backup_user_id": p.users["304"], "backup_ring_seconds": 6})
+    p.wait_published("1", dial_of("301"))
+    since = cdr_max_id()
+    a, b1, b4, q = Line("305"), Line("301"), Line("304"), Line("302")
+    a.dial(PROBE_NUMBER)
+    c.that(rang(b1, 8), "301 rings")
+    c.that(rang(b4, 10), "304 (the roster's backup) rings")
+    c.that(not rang(q, 2), "the schedule's queue does not ring")
+    a.hangup(); pause(2)
+    legs(since)  # wait until this call's records are in, so the next call's are counted alone
+
+    p.page.post("setRuleBackup", {"id": p.id, "rule": "roster", "rule_id": roster, "backup_type": "none"})
+    deadline = time.time() + 20
+    while p.published().get("backup") != "none" and time.time() < deadline:
+        time.sleep(0.5)
+    since = cdr_max_id()
+    a, b1, b4 = Line("305"), Line("301"), Line("304")
+    a.dial(PROBE_NUMBER)
+    c.that(rang(b1, 8), "301 rings")
+    c.that(answered(a, 12), "voicemail answers")
+    c.that(not rang(b4, 1), "no backup rings")
+    a.hangup(); pause(2)
+    c.that(not any(r["dst_num"] in ("304", QUEUE) for r in legs(since)), "call records: neither 304 nor the queue was tried")
+
+
+@scenario("Caller name prefix: the phone on duty shows SERVICE: before the caller's name.")
+def caller_name_prefix(p, c):
+    p.reset(callerid_prefix="SERVICE")
+    p.override("cover", "302")
+    p.wait_published("1", dial_of("302"))
+    wait_dialplan(f"{PROBE_NUMBER}@internal", "SERVICE:")
+    a, b2 = Line("305"), Line("302")
+    a.dial(PROBE_NUMBER)
+    try:
+        event = b2.ringing(8)
+    except TimeoutError:
+        event = {}
+    name = event.get("peerdisplayname", "")
+    c.that(name.startswith("SERVICE:"), f"302 sees the caller as {name!r}")
+    a.hangup(); pause(2)
 
 
 @scenario("Test call from the page: 305 rings first; once answered, the schedule's chain rings 303.")

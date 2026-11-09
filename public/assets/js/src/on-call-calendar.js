@@ -931,8 +931,8 @@ function renderSettings(body) {
   const others = d.references.filter((r) => !(r.kind === 'route' && linked.some((l) => l.id === r.id)));
   const shortTimeout = d.routes.filter((r) => r.extension === s.number && r.timeout > 0 && r.timeout < d.needed_timeout);
 
-  const rules = [...d.rosters.map((r) => ({ type: 'roster', id: r.id, priority: r.priority, label: `${t('occ_Roster')}: ${rosterLabel(r)}` })),
-    ...d.rotations.map((r) => ({ type: 'rotation', id: r.id, priority: r.priority, label: `${t('occ_Rotation')}: ${memberNames(r.members, d.members).join(' → ')}` }))]
+  const rules = [...d.rosters.map((r) => ({ type: 'roster', id: r.id, priority: r.priority, label: `${t('occ_Roster')}: ${rosterLabel(r)}`, rule: r })),
+    ...d.rotations.map((r) => ({ type: 'rotation', id: r.id, priority: r.priority, label: `${t('occ_Rotation')}: ${memberNames(r.members, d.members).join(' → ')}`, rule: r }))]
     .sort((a, b) => a.priority - b.priority);
   const moveRule = (i, dir) => {
     const list = [...rules];
@@ -989,6 +989,11 @@ function renderSettings(body) {
       el('p', { class: 'occ-hint', text: t('occ_OtherReferences') }),
       el('ul', {}, others.map((r) => el('li', { text: `${t(`occ_RefKind_${r.kind}`)} "${r.name}"` })))) : null,
 
+    rules.length ? el('div', {},
+      el('h4', { class: 'ui dividing header', text: t('occ_RuleBackups') }),
+      el('p', { class: 'occ-hint', text: t('occ_RuleBackupsHint') }),
+      rules.map((r) => ruleBackupRow(r, s))) : null,
+
     rules.length > 1 ? el('div', {},
       el('h4', { class: 'ui dividing header', text: t('occ_RuleOrder') }),
       el('p', { class: 'occ-hint', text: t('occ_RuleOrderHint') }),
@@ -1000,6 +1005,35 @@ function renderSettings(body) {
     can('deleteSchedule') && el('h4', { class: 'ui dividing header', text: t('occ_DangerZone') }),
     can('deleteSchedule') && button(t('occ_DeleteSchedule'), () => confirmDialog(sub(t('occ_DeleteScheduleConfirm'), { name: s.name, number: s.number }),
       () => post('deleteSchedule', { id: s.id }).then(() => { flash(t('occ_Deleted')); refreshOptions().then(() => go('#/')); })), 'basic red', 'trash'));
+}
+
+/** One roster's or rotation's own backup, under Settings. */
+function ruleBackupRow(r, schedule) {
+  const o = state.options;
+  const form = {
+    backup_type: r.rule.backup_type || '', backup_number: r.rule.backup_number || (o.queues[0] || {}).number || '',
+    backup_user_id: r.rule.backup_user_id || '', backup_ring_seconds: r.rule.backup_ring_seconds || 20,
+  };
+  const editable = can('setRuleBackup');
+  const box = el('div', { class: 'fields' });
+  const render = () => fill(box,
+    el('div', { class: 'six wide field' },
+      select([['', t('occ_BackupSameAsSchedule')], ['none', t('occ_BackupNoneRule')], ['member', t('occ_BackupPerson')], ['queue', t('occ_BackupQueue')]],
+        form.backup_type, { disabled: !editable, onchange: (e) => { form.backup_type = e.target.value; render(); } })),
+    form.backup_type === 'queue' ? el('div', { class: 'five wide field' },
+      select(o.queues.map((q) => [q.number, `${q.name} (${q.number})`]), form.backup_number,
+        { disabled: !editable, onchange: (e) => { form.backup_number = e.target.value; } })) : null,
+    form.backup_type === 'member' ? el('div', { class: 'five wide field' },
+      select([['', '—'], ...employeeOptions()], form.backup_user_id, { disabled: !editable, onchange: (e) => { form.backup_user_id = e.target.value; } })) : null,
+    form.backup_type === 'member' ? el('div', { class: 'two wide field' },
+      el('input', { type: 'number', min: 5, max: 300, value: form.backup_ring_seconds, disabled: !editable,
+        title: t('occ_RingSeconds'), oninput: (e) => { form.backup_ring_seconds = Number(e.target.value); } })) : null,
+    editable ? el('div', { class: 'three wide field' }, button(t('occ_Save'), () => post('setRuleBackup', {
+      id: schedule.id, rule: r.type, rule_id: r.id, backup_type: form.backup_type, backup_number: form.backup_number,
+      backup_user_id: Number(form.backup_user_id) || 0, backup_ring_seconds: form.backup_ring_seconds,
+    }).then(() => { flash(t('occ_Saved')); refresh(); }), 'basic')) : null);
+  render();
+  return el('div', { class: 'ui form occ-rule-backup' }, el('label', { class: 'occ-label', text: r.label }), box);
 }
 
 /* ------------------------------------------------------------------ activity tab */

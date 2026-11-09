@@ -88,6 +88,7 @@ final class ScheduleRepository
             $rosters[] = [
                 'id' => (int)$r['id'], 'priority' => (int)$r['priority'], 'valid_from' => (string)$r['valid_from'],
                 'valid_until' => (string)$r['valid_until'], 'cycle_weeks' => (int)$r['cycle_weeks'],
+                ...self::ruleBackup($r),
                 'cells' => array_map(static fn (array $c): array => [
                     'shift_type_id' => (int)$c['shift_type_id'], 'week' => (int)$c['week'],
                     'weekday' => (int)$c['weekday'], 'member_id' => (int)$c['member_id'],
@@ -105,6 +106,7 @@ final class ScheduleRepository
             'id' => (int)$r['id'], 'priority' => (int)$r['priority'], 'members' => self::intList((string)$r['members']),
             'first_handover' => (string)$r['first_handover'], 'turn_days' => (int)$r['turn_days'],
             'active_hours' => self::activeHours((string)$r['active_hours']), 'valid_until' => (string)$r['valid_until'],
+            ...self::ruleBackup($r),
         ], $this->rows('SELECT * FROM ' . self::ROTATIONS . ' WHERE schedule_id = ? ORDER BY priority, id', [$scheduleId]));
     }
 
@@ -141,11 +143,13 @@ final class ScheduleRepository
             $members[$m['id']] = ['name' => $m['name'], 'extension' => $m['extension']];
         }
 
+        $withBackup = static fn (array $rule): array => $rule + ['backup' => BackupSpec::of($rule, $directory)];
+
         return [
             'members'     => $members,
             'shift_types' => $this->shiftTypes($scheduleId),
-            'rosters'     => $this->rosters($scheduleId),
-            'rotations'   => $this->rotations($scheduleId),
+            'rosters'     => array_map($withBackup, $this->rosters($scheduleId)),
+            'rotations'   => array_map($withBackup, $this->rotations($scheduleId)),
             'overrides'   => $this->overrides($scheduleId, $sinceLocal),
         ];
     }
@@ -180,6 +184,24 @@ final class ScheduleRepository
         }
 
         return $row;
+    }
+
+    /**
+     * A roster's or rotation's own backup fields ('' type: the schedule's backup).
+     *
+     * @param array<string, mixed> $row
+     * @return array{backup_type: string, backup_number: string, backup_user_id: ?int, backup_ring_seconds: int}
+     */
+    private static function ruleBackup(array $row): array
+    {
+        $user = $row['backup_user_id'] ?? null;
+
+        return [
+            'backup_type' => (string)($row['backup_type'] ?? ''),
+            'backup_number' => (string)($row['backup_number'] ?? ''),
+            'backup_user_id' => $user === null || $user === '' ? null : (int)$user,
+            'backup_ring_seconds' => (int)($row['backup_ring_seconds'] ?? 20) ?: 20,
+        ];
     }
 
     /** @return list<int> */

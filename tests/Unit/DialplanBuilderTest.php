@@ -67,7 +67,8 @@ final class DialplanBuilderTest extends TestCase
     {
         $plan = DialplanBuilder::internal([self::SCHEDULE]);
 
-        self::assertStringContainsString("same => n(backup),NoOp(On-call schedule 7: backup)\n\tsame => n(final)", $plan);
+        // No rule backup and no schedule backup: straight on to the final destination.
+        self::assertStringContainsString("same => n(bdefault),NoOp()\n\tsame => n(final)", $plan);
     }
 
     public function testOutsideHoursDestinationOverridesTheFinalOne(): void
@@ -118,6 +119,18 @@ final class DialplanBuilderTest extends TestCase
         self::assertStringNotContainsString('Playback', $plan);
         self::assertStringNotContainsString('Progress', $plan);
         self::assertStringContainsString('Dial(${OCC_DIAL},20)', $plan);
+    }
+
+    public function testRuleBackupFromAstdbComesBeforeTheSchedulesOwn(): void
+    {
+        $plan = DialplanBuilder::internal([['backup_type' => 'queue', 'backup_number' => '2000'] + self::SCHEDULE]);
+
+        self::assertStringContainsString('Set(OCC_BSPEC=${DB(OnCallCalendar/7/backup)})', $plan);
+        self::assertStringContainsString('GotoIf($["${OCC_BSPEC}" == "none"]?final)', $plan);
+        self::assertStringContainsString('same => n(bqueue),Goto(internal,${CUT(OCC_BSPEC,|,2)},1)', $plan);
+        self::assertStringContainsString('Dial(${OCC_BACKUP},${OCC_BRING})', $plan);
+        // The schedule's own backup follows bdefault.
+        self::assertStringContainsString("same => n(bdefault),NoOp()\n\tsame => n,Goto(internal,2000,1)", $plan);
     }
 
     public function testCallerIdPrefixForThePeopleRung(): void

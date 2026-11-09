@@ -67,14 +67,14 @@ final class DutyPublisherTest extends TestCase
         $core = TestDatabases::core([110 => ['Anna', null]]);
         $values = ModuleContext::currentValues(self::moduleWithServiceLine(), $core, self::ts('2026-11-09 09:00'));
 
-        self::assertSame(['start' => '2', 'dial' => '', 'goto' => ''], array_diff_key($values[1], ['until' => 0]));
+        self::assertSame(['start' => '2', 'dial' => '', 'goto' => '', 'backup' => ''], array_diff_key($values[1], ['until' => 0]));
     }
 
     public function testSendElsewhereWritesTheDestination(): void
     {
         $segment = new DutySegment(0, 100, DutyResolver::START_ELSEWHERE, DutyResolver::BY_OVERRIDE, 1, [], [], '2003');
 
-        self::assertSame(['start' => 'go', 'dial' => '', 'goto' => '2003', 'until' => '100'], DutyPublisher::forSegment($segment, 0));
+        self::assertSame(['start' => 'go', 'dial' => '', 'goto' => '2003', 'backup' => '', 'until' => '100'], DutyPublisher::forSegment($segment, 0));
     }
 
     public function testInvalidDestinationFallsBackToAGap(): void
@@ -83,6 +83,30 @@ final class DutyPublisherTest extends TestCase
 
         self::assertSame('2', DutyPublisher::forSegment($segment, 0)['start']);
         self::assertSame('', DutyPublisher::forSegment($segment, 0)['goto']);
+    }
+
+    public function testTheDecidingRulesBackupIsPublished(): void
+    {
+        $db = self::moduleWithServiceLine();
+        $db->exec("UPDATE m_Rosters SET backup_type = 'member', backup_user_id = 111, backup_ring_seconds = 15 WHERE id = 1");
+        $core = TestDatabases::core([110 => ['Anna', '201'], 111 => ['Ben', '202']]);
+
+        self::assertSame('dial|15|Local/202@internal-users/n', ModuleContext::currentValues($db, $core, self::ts('2026-11-09 09:00'))[1]['backup']);
+        // Outside the roster's shifts the schedule's own backup applies.
+        self::assertSame('', ModuleContext::currentValues($db, $core, self::ts('2026-11-09 20:00'))[1]['backup']);
+
+        $db->exec("UPDATE m_Rosters SET backup_type = 'none' WHERE id = 1");
+        self::assertSame('none', ModuleContext::currentValues($db, $core, self::ts('2026-11-09 09:00'))[1]['backup']);
+        $db->exec("UPDATE m_Rosters SET backup_type = 'queue', backup_number = '2000' WHERE id = 1");
+        self::assertSame('queue|2000', ModuleContext::currentValues($db, $core, self::ts('2026-11-09 09:00'))[1]['backup']);
+    }
+
+    public function testMalformedBackupSpecsAreNotPublished(): void
+    {
+        foreach (['dial|20|Local/202@internal-users/n,1)', 'queue|20,1', 'x'] as $spec) {
+            $segment = new DutySegment(0, 100, DutyResolver::START_ON_DUTY, DutyResolver::BY_ROSTER, 1, [1], ['201'], '', $spec);
+            self::assertSame('', DutyPublisher::forSegment($segment, 0)['backup'], $spec);
+        }
     }
 
     public function testRepositoryResolvesMembersThroughTheEmployeeDirectory(): void

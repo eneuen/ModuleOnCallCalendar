@@ -55,6 +55,7 @@
 .occ-window.ui.segment { padding: .6em .8em; }
 .occ-link { margin: .5em 0 1em; }
 .occ-audit td { vertical-align: top; }
+.occ-rule-backup { margin-bottom: .8em; }
 
 @media (max-width: 767px) {
     .occ-cards.ui.cards > .card { width: 100%; }

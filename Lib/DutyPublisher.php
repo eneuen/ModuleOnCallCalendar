@@ -29,7 +29,7 @@ final class DutyPublisher
     /**
      * @param list<array<string, mixed>> $schedules rows of m_Schedules
      * @param callable(int, string): array<string, mixed> $planFor schedule id and "Y-m-d H:i" (now) → plan
-     * @return array<int, array{start: string, dial: string, goto: string, until: string}> keyed by schedule id
+     * @return array<int, array{start: string, dial: string, goto: string, backup: string, until: string}> keyed by schedule id
      */
     public static function values(array $schedules, callable $planFor, DateTimeZone $tz, int $now): array
     {
@@ -52,7 +52,7 @@ final class DutyPublisher
         return $values;
     }
 
-    /** @return array{start: string, dial: string, goto: string, until: string} */
+    /** @return array{start: string, dial: string, goto: string, backup: string, until: string} */
     public static function forSegment(DutySegment $segment, int $now): array
     {
         $start = $segment->start;
@@ -69,6 +69,8 @@ final class DutyPublisher
             'start' => $start,
             'dial'  => $start === DutyResolver::START_ON_DUTY ? $segment->dialString() : '',
             'goto'  => $goto,
+            // The deciding rule's own backup; a malformed one falls back to the schedule's.
+            'backup' => BackupSpec::isValid($segment->backup) ? $segment->backup : '',
             'until' => (string)min($segment->to, $now + self::MAX_AGE),
         ];
     }

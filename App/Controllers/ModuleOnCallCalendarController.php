@@ -362,6 +362,25 @@ class ModuleOnCallCalendarController extends BaseController
         });
     }
 
+    /**
+     * POST setRuleBackup: id (schedule), rule ('roster' or 'rotation'),
+     * rule_id, backup_type, backup_number, backup_user_id, backup_ring_seconds.
+     * A rule's backup decides where calls can go, so it is a settings right.
+     */
+    public function setRuleBackupAction(): void
+    {
+        $this->write(function (ScheduleEditor $editor, array $data, PDO $module, PDO $core): array {
+            $id = (int)($data['id'] ?? 0);
+            $editor->setRuleBackup($id, $data);
+            $schedule = (new ScheduleRepository($module))->schedule($id);
+            if ($schedule !== null) {
+                $this->linker($module, $core)->refreshTimeouts($schedule);
+            }
+
+            return [];
+        });
+    }
+
     // ------------------------------------------------------------------ plan writes
 
     /** POST saveShiftType: id (schedule), shift (name, start, end, weekdays, id to change one). */
