@@ -51,6 +51,11 @@ final class DialplanBuilder
     public const string FAMILY = 'OnCallCalendar';
 
     public const string LOOKUP_AGI = 'on_call_calendar_lookup.php';
+    public const string TAKEOVER_AGI = 'on_call_calendar_takeover.php';
+
+    /** The feature code for taking over duty from a phone; a schedule's number may follow. */
+    public const string TAKEOVER_CODE = '*22';
+    public const string TAKEOVER_CONTEXT = 'on-call-calendar-takeover';
 
     /** How many schedules one call may pass through before it is sent to voicemail. */
     public const int MAX_HOPS = 5;
@@ -66,8 +71,36 @@ final class DialplanBuilder
         foreach (self::valid($schedules) as $s) {
             $out .= self::entry($s);
         }
+        if ($out !== '') {
+            // *22 alone takes over the caller's one schedule; *22 followed by a number picks one.
+            $code = self::TAKEOVER_CODE;
+            $out .= "exten => $code,1,Set(OCC_TO=)\n\t"
+                . 'same => n,Goto(' . self::TAKEOVER_CONTEXT . ",s,1)\n"
+                . "exten => _{$code}X.,1,Set(OCC_TO=\${FILTER(0-9,\${EXTEN:" . strlen($code) . "})})\n\t"
+                . 'same => n,Goto(' . self::TAKEOVER_CONTEXT . ",s,1)\n";
+        }
 
         return $out;
+    }
+
+    /**
+     * Separate contexts: the *22 take-over. The caller is identified by the
+     * PJSIP endpoint the call came from; the AGI script checks they are a
+     * member of the schedule, adds the override and sets OCC_TAKEOVER.
+     *
+     * @param list<array<string, mixed>> $schedules rows of m_Schedules
+     */
+    public static function contexts(array $schedules): string
+    {
+        if (self::valid($schedules) === []) {
+            return '';
+        }
+
+        return '[' . self::TAKEOVER_CONTEXT . "]\n"
+            . "exten => s,1,Answer()\n\t"
+            . 'same => n,AGI(' . self::TAKEOVER_AGI . ',${CHANNEL(endpoint)},${OCC_TO})' . "\n\t"
+            . 'same => n,ExecIf($["${OCC_TAKEOVER}" == "ok"]?Playback(beep&auth-thankyou):Playback(beeperr))' . "\n\t"
+            . "same => n,Hangup()\n";
     }
 
     /**

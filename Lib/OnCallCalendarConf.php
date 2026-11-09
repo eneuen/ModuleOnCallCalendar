@@ -37,6 +37,12 @@ class OnCallCalendarConf extends ConfigClass
         return DialplanBuilder::internal($this->schedules());
     }
 
+    /** The *22 take-over context. */
+    public function extensionGenContexts(): string
+    {
+        return DialplanBuilder::contexts($this->schedules());
+    }
+
     /** Each schedule's number, in [internal-transfer]: reached by transfers from phones. */
     public function extensionGenInternalTransfer(): string
     {

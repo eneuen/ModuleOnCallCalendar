@@ -76,9 +76,11 @@ The core creates the module's tables from the model annotations in `Models/` on 
 | `Lib/DutyResolver.php`, `Lib/DutySegment.php` | Who is on duty at a moment or over a range |
 | `Lib/DutyPublisher.php`, `Lib/WorkerOnCallCalendar.php` | The AstDB values, and the worker that keeps them current and places test calls |
 | `agi-bin/on_call_calendar_lookup.php` | Live lookup when the published answer is missing or expired |
+| `Lib/TakeOver.php`, `agi-bin/on_call_calendar_takeover.php` | \*22: a member takes over duty from their phone |
 | `Lib/ScheduleRepository.php`, `Lib/Employees.php`, `Lib/Databases.php`, `Lib/ModuleContext.php` | Reading schedules, employees and settings |
 | `Lib/ScheduleEditor.php`, `Lib/EditorException.php`, `Lib/Templates.php` | Every change, validated and audited; the templates new schedules start from |
 | `Lib/RouteLinker.php` | Linking and unlinking incoming routes, and what else routes to a number |
+| `Lib/BackupSpec.php` | A roster's or rotation's own backup, as published in AstDB |
 | `Lib/ScheduleNumbers.php` | The schedules' numbers in the core's extensions table |
 | `Lib/ScheduleStatus.php` | The home page's now, next and coverage |
 | `Lib/Rights.php` | The page's actions grouped into View, Edit duty and Edit settings |

@@ -47,9 +47,11 @@ class PbxExtensionSetup extends PbxExtensionSetupBase
      */
     public function unInstallFiles(bool $keepSettings = false): bool
     {
-        $link = Directories::getDir(Directories::AST_AGI_BIN_DIR) . '/' . DialplanBuilder::LOOKUP_AGI;
-        if (is_link($link) && str_starts_with((string)readlink($link), $this->moduleDir . '/')) {
-            unlink($link);
+        foreach ([DialplanBuilder::LOOKUP_AGI, DialplanBuilder::TAKEOVER_AGI] as $script) {
+            $link = Directories::getDir(Directories::AST_AGI_BIN_DIR) . '/' . $script;
+            if (is_link($link) && str_starts_with((string)readlink($link), $this->moduleDir . '/')) {
+                unlink($link);
+            }
         }
         try {
             Util::getAstManager('off')->sendRequestTimeout('DBDelTree', ['Family' => DialplanBuilder::FAMILY]);

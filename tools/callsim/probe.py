@@ -104,7 +104,7 @@ class Probe:
         return [self.users[e] for e in extensions]
 
     def reset(self, **chain):
-        """An empty plan and a short chain: ring 8 s, no backup, voicemail; then the given changes."""
+        """An empty plan, no members and a short chain: ring 8 s, no backup, voicemail; then the given changes."""
         d = self.detail()
         today = datetime.now(self.tz).date()
         cal = self.page.get("calendar", id=self.id, **{"from": str(today - timedelta(days=2)), "to": str(today + timedelta(days=3))})
@@ -121,6 +121,10 @@ class Probe:
             self.page.post("deleteShiftType", {"id": self.id, "shift_type_id": s["id"]})
         settings = {"id": self.id, "enabled": True, "ring_seconds": 8, "backup_type": "", "backup_number": "", "backup_user_id": 0,
                     "backup_ring_seconds": 8, "final_number": "voicemail", "outside_number": "", "greeting_sound_id": ""}
+        # Without its plan or a backup person nobody is used any more, so every member can go.
+        self.page.post("updateSchedule", {**settings, "backup_type": "", "backup_user_id": 0})
+        for m in self.detail()["members"]:
+            self.page.post("removeMember", {"id": self.id, "member_id": m["id"]})
         settings.update(chain)
         self.page.post("updateSchedule", settings)
 
@@ -475,6 +479,43 @@ def caller_name_prefix(p, c):
     name = event.get("peerdisplayname", "")
     c.that(name.startswith("SERVICE:"), f"302 sees the caller as {name!r}")
     a.hangup(); pause(2)
+
+
+@scenario("*22 from a phone: 303, a member, takes over from 301 until the plan next changes and gets the next call; "
+          "304, not a member, can't.")
+def takeover_by_phone(p, c):
+    p.reset()
+    p.roster_today("301")
+    tomorrow = (datetime.now(p.tz) + timedelta(days=1)).strftime("%Y-%m-%d")
+    # 303 becomes a member of the schedule through a cover tomorrow; 304 is not one.
+    p.page.post("addOverride", {"id": p.id, "override": {"kind": "cover", "start_at": f"{tomorrow} 08:00",
+                                                         "end_at": f"{tomorrow} 09:00", "user_ids": p.ids("303")}})
+    p.wait_published("1", dial_of("301"))
+    wait_dialplan("*22@internal", "on-call-calendar-takeover")
+
+    x = Line("304")
+    x.dial("*22")
+    c.that(answered(x, 8), "304's *22 is answered (to play the refusal)")
+    x.closed(15); pause(1)
+    c.that(p.published().get("dial") == dial_of("301"), "a non-member's *22 changes nothing")
+
+    t = Line("303")
+    t.dial("*22")
+    c.that(answered(t, 8), "303's *22 is answered")
+    t.closed(15)
+    try:
+        p.wait_published("1", dial_of("303"))
+        c.that(True, "303 is on duty right after *22")
+    except RuntimeError as e:
+        c.that(False, str(e))
+    a, b1, b3 = Line("305"), Line("301"), Line("303")
+    a.dial(PROBE_NUMBER)
+    c.that(rang(b3, 8), "303 rings")
+    c.that(not rang(b1, 1), "301 does not ring")
+    a.hangup(); pause(2)
+    overrides = p.page.get("calendar", id=p.id, **{"from": datetime.now(p.tz).strftime("%Y-%m-%d"),
+                                                   "to": (datetime.now(p.tz) + timedelta(days=1)).strftime("%Y-%m-%d")})["overrides"]
+    c.that(any(o["kind"] == "takeover" and o["note"] == "*22" for o in overrides), "the take-over is on the calendar")
 
 
 @scenario("Test call from the page: 305 rings first; once answered, the schedule's chain rings 303.")

@@ -29,3 +29,6 @@ parameters:
         -
             identifier: requireOnce.fileNotFound
             path: ../../agi-bin/on_call_calendar_lookup.php
+        -
+            identifier: requireOnce.fileNotFound
+            path: ../../agi-bin/on_call_calendar_takeover.php

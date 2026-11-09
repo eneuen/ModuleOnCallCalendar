@@ -144,6 +144,17 @@ final class DialplanBuilderTest extends TestCase
         self::assertStringNotContainsString('CALLERID(name)', DialplanBuilder::internal([self::SCHEDULE]));
     }
 
+    public function testTakeOverCodeAndContext(): void
+    {
+        $plan = DialplanBuilder::internal([self::SCHEDULE]);
+        self::assertStringContainsString("exten => *22,1,Set(OCC_TO=)\n\tsame => n,Goto(on-call-calendar-takeover,s,1)", $plan);
+        self::assertStringContainsString('exten => _*22X.,1,Set(OCC_TO=${FILTER(0-9,${EXTEN:3})})', $plan);
+        self::assertStringContainsString('AGI(on_call_calendar_takeover.php,${CHANNEL(endpoint)},${OCC_TO})', DialplanBuilder::contexts([self::SCHEDULE]));
+        // No schedules, no feature code.
+        self::assertSame('', DialplanBuilder::internal([]));
+        self::assertSame('', DialplanBuilder::contexts([]));
+    }
+
     public function testTransferEntriesForwardIntoInternal(): void
     {
         self::assertSame(

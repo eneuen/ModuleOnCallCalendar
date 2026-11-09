@@ -33,6 +33,8 @@ Open **Modules → On Call Calendar** (administrators, and access groups given r
 
 The home page shows who is on duty on every line right now, who is next, and where nobody is planned.
 
+**Taking over from a phone.** A member of a schedule can dial **\*22** to be on duty from now until the plan next changes (the next handover or the end of the shift, at most a week), for example to cover a colleague who has to leave early. Someone in several schedules dials \*22 followed by the schedule's number, e.g. \*222202. A beep and "thank you" confirm it; an error tone means they are not a member of that schedule. The take-over appears on the calendar like any other override and can be moved or deleted there.
+
 ## Incoming routes
 
 Linking a route from the module (in the wizard or under **Settings**) points it at the schedule's number and remembers what it pointed at before; **Unlink** puts it back. The module also raises the route's timeout so the whole chain fits: MikoPBX stops a route's call at that timeout and moves on to the route's next rule.
