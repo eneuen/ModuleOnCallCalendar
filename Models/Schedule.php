@@ -140,16 +140,22 @@ class Schedule extends ModulesModelsBase
      */
     public static function getDynamicRelations(&$calledModelObject): void
     {
-        if ($calledModelObject instanceof Extensions) {
-            $calledModelObject->hasOne(
+        if (!$calledModelObject instanceof Extensions) {
+            return;
+        }
+        // The schedule's own number, and the numbers its chain sends calls to:
+        // the core then refuses to delete a queue, IVR menu or employee number
+        // that a schedule's backup, final or outside-hours step still uses.
+        foreach (['number' => '', 'backup_number' => 'Backup', 'final_number' => 'Final', 'outside_number' => 'Outside'] as $field => $suffix) {
+            $calledModelObject->hasMany(
                 'number',
                 self::class,
-                'number',
+                $field,
                 [
-                    'alias'      => 'ModuleOnCallCalendarSchedule',
+                    'alias'      => "ModuleOnCallCalendarSchedule$suffix",
                     'foreignKey' => [
                         'allowNulls' => true,
-                        'message'    => 'Models\ModuleOnCallCalendarSchedule',
+                        'message'    => "Models\\ModuleOnCallCalendarSchedule$suffix",
                         'action'     => Relation::ACTION_RESTRICT,
                     ],
                 ]

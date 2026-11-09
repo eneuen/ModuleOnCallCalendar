@@ -153,6 +153,68 @@ final class RouteLinkerTest extends TestCase
         self::assertSame('201', $this->route(3)['extension']);
     }
 
+    public function testRouteAlreadySentHereByHandIsNotLinked(): void
+    {
+        $schedule = $this->schedule();
+        $this->core->exec("UPDATE m_IncomingRoutingTable SET extension = '2202' WHERE id = 3");
+
+        // Unlinking could only "restore" it to the schedule's own number.
+        $this->expectException(EditorException::class);
+        $this->expectExceptionMessageMatches('/^occ_ErrRouteAlreadyHere/');
+        $this->linker()->link($schedule, 3);
+    }
+
+    public function testUnlinkKeepsATimeoutChangedByHand(): void
+    {
+        $schedule = $this->schedule();
+        $this->linker()->link($schedule, 3);
+        $this->core->exec('UPDATE m_IncomingRoutingTable SET timeout = 120 WHERE id = 3');
+
+        self::assertTrue($this->linker()->unlink($schedule['id'], 3));
+        self::assertSame(['extension' => '201', 'timeout' => 120], $this->route(3));
+    }
+
+    public function testUnlimitedRouteTimeoutStaysUnlimited(): void
+    {
+        $this->core->exec('UPDATE m_IncomingRoutingTable SET timeout = 0 WHERE id = 3');
+        $this->linker()->link($this->schedule(), 3);
+
+        self::assertSame(0, $this->route(3)['timeout']);
+    }
+
+    public function testRefreshRaisesLinkedTimeoutsAfterTheChainGrows(): void
+    {
+        $schedule = $this->schedule();
+        $this->linker()->link($schedule, 3);
+        self::assertSame(20 + RouteLinker::TIMEOUT_MARGIN, $this->route(3)['timeout']);
+
+        (new ScheduleEditor($this->module, $this->core, 'admin', self::NOW))->updateSchedule($schedule['id'], ['ring_seconds' => 60]);
+        $this->linker()->refreshTimeouts((new ScheduleRepository($this->module))->schedule($schedule['id']));
+
+        self::assertSame(60 + RouteLinker::TIMEOUT_MARGIN, $this->route(3)['timeout']);
+        // Unlinking still restores the route's own timeout.
+        $this->linker()->unlink($schedule['id'], 3);
+        self::assertSame(['extension' => '201', 'timeout' => 20], $this->route(3));
+    }
+
+    public function testReferencesIncludeEveryQueueRedirectAndOtherSchedules(): void
+    {
+        $this->schedule();
+        $this->core->exec("INSERT INTO m_CallQueues (extension, name, redirect_to_extension_if_unanswered) VALUES ('2010', 'Unanswered', '2202')");
+        $this->core->exec("INSERT INTO m_CallQueues (extension, name, redirect_to_extension_if_repeat_exceeded) VALUES ('2011', 'Repeats', '2202')");
+        $this->core->exec("INSERT INTO m_Extensions (number, type) VALUES ('2202', 'MODULES'), ('2203', 'MODULES'), ('2204', 'MODULES')");
+        $editor = new ScheduleEditor($this->module, $this->core, 'admin', self::NOW);
+        $this->module->exec("INSERT INTO m_Schedules (name, number, ring_seconds, backup_ring_seconds, final_number, enabled)
+            VALUES ('Night', '2203', 20, 20, '2202', '1')");
+        $evening = $editor->createSchedule(['name' => 'Evening', 'number' => '2205', 'template' => 'blank', 'outside_number' => '2204']);
+        $this->module->exec("INSERT INTO m_Overrides (schedule_id, kind, start_at, end_at, destination, created_at)
+            VALUES ($evening, 'elsewhere', '2026-11-11 08:00', '2026-11-11 18:00', '2202', 0)");
+
+        $found = array_map(static fn (array $r): string => $r['kind'] . ':' . $r['name'], $this->linker()->references('2202'));
+        sort($found);
+        self::assertSame(['queue:Repeats', 'queue:Unanswered', 'schedule:Evening', 'schedule:Night'], $found);
+    }
+
     public function testReferencesFindEverythingThatRoutesToTheNumber(): void
     {
         $this->core->exec("UPDATE m_IncomingRoutingTable SET extension = '2202' WHERE id = 3");

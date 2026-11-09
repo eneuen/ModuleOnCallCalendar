@@ -69,9 +69,9 @@ final class ScheduleEditor
     }
 
     /**
-     * Creates a schedule from a template. The caller registers its number in
-     * the core first (ScheduleNumbers::register) and removes it again if this
-     * fails. DIALPLAN_RELOAD.
+     * Creates a schedule from a template. The number must be free in the PBX;
+     * the caller then registers it in the core (ScheduleNumbers::register) and
+     * deletes the schedule again if that fails. DIALPLAN_RELOAD.
      *
      * $data: name, number, template, and optionally the chain fields of
      * updateSchedule(), shift_names (the template's two shift names in the
@@ -92,11 +92,8 @@ final class ScheduleEditor
         if (!in_array($template, self::TEMPLATES, true)) {
             throw new EditorException('occ_ErrInvalid');
         }
-        if ($this->scheduleByNumber($number) !== null) {
-            throw new EditorException('occ_ErrNumberTaken', ['number' => $number]);
-        }
-        $type = $this->coreExtensionType($number);
-        if ($type !== null && $type !== 'MODULES') {
+        // Any number the PBX already has is taken, another module's included.
+        if ($this->scheduleByNumber($number) !== null || $this->coreExtensionType($number) !== null) {
             throw new EditorException('occ_ErrNumberTaken', ['number' => $number]);
         }
 
@@ -157,7 +154,7 @@ final class ScheduleEditor
                 $this->module->prepare('UPDATE ' . ScheduleRepository::SCHEDULES . ' SET greeting_sound_id = ? WHERE id = ?')
                     ->execute([$sound, $id]);
             }
-            $this->applyChain($id, $data + $before);
+            $this->applyChain($id, $data + $before, $before);
             $this->audit($id, 'schedule.update', $before, $this->repository->schedule($id));
         });
     }
@@ -183,12 +180,17 @@ final class ScheduleEditor
     }
 
     /**
-     * Validates and writes the chain fields present in $data.
+     * Validates and writes the chain fields. On an update ($before), only the
+     * fields that change are checked against the PBX: a destination deleted
+     * in the core since doesn't stop the admin from renaming or disabling the
+     * schedule, or from choosing a new destination.
      *
      * @param array<string, mixed> $data
+     * @param array<string, mixed>|null $before
      */
-    private function applyChain(int $id, array $data): void
+    private function applyChain(int $id, array $data, ?array $before = null): void
     {
+        $changed = static fn (string $key): bool => $before === null || (string)($data[$key] ?? '') !== (string)($before[$key] ?? '');
         $ring = self::ringSeconds($data['ring_seconds'] ?? 20);
         $backupRing = self::ringSeconds($data['backup_ring_seconds'] ?? 20);
         $backupType = (string)($data['backup_type'] ?? '');
@@ -199,19 +201,25 @@ final class ScheduleEditor
         $backupUser = null;
         if ($backupType === 'queue') {
             $backupNumber = (string)($data['backup_number'] ?? '');
-            if ($this->coreExtensionType($backupNumber) !== 'QUEUE') {
+            if (($changed('backup_type') || $changed('backup_number')) && $this->coreExtensionType($backupNumber) !== 'QUEUE') {
                 throw new EditorException('occ_ErrBackupQueue');
             }
         } elseif ($backupType === 'member') {
             $backupUser = (int)($data['backup_user_id'] ?? 0);
-            if ($this->extensionOf($backupUser) === null) {
+            if (($changed('backup_type') || $changed('backup_user_id')) && $this->extensionOf($backupUser) === null) {
                 throw new EditorException('occ_ErrNoExtension');
             }
             $this->memberId($id, $backupUser);
         }
         $number = (string)$this->requireSchedule($id)['number'];
-        $final = $this->destination((string)($data['final_number'] ?? 'voicemail'), $number, false);
-        $outside = $this->destination((string)($data['outside_number'] ?? ''), $number, true);
+        $final = (string)($data['final_number'] ?? 'voicemail');
+        $outside = (string)($data['outside_number'] ?? '');
+        if ($changed('final_number')) {
+            $this->destination($final, $number, false);
+        }
+        if ($changed('outside_number')) {
+            $this->destination($outside, $number, true);
+        }
 
         $this->module->prepare('UPDATE ' . ScheduleRepository::SCHEDULES . ' SET ring_seconds = ?, backup_type = ?,
             backup_number = ?, backup_user_id = ?, backup_ring_seconds = ?, final_number = ?, outside_number = ? WHERE id = ?')
@@ -246,6 +254,9 @@ final class ScheduleEditor
             $before = $this->requireRow(ScheduleRepository::SHIFT_TYPES, $id, $scheduleId);
             $this->module->prepare('UPDATE ' . ScheduleRepository::SHIFT_TYPES . ' SET name = ?, start_time = ?, end_time = ?,
                 weekdays = ? WHERE id = ?')->execute([$name, $start, $end, implode(',', $weekdays), $id]);
+            // Cells on weekdays the shift no longer runs could neither ring nor be cleared.
+            $this->module->prepare('DELETE FROM ' . ScheduleRepository::ROSTER_CELLS . ' WHERE shift_type_id = ? AND weekday NOT IN ('
+                . implode(',', $weekdays) . ')')->execute([$id]);
             $this->audit($scheduleId, 'shift_type.update', $before, $this->row(ScheduleRepository::SHIFT_TYPES, $id));
 
             return $id;
@@ -417,13 +428,13 @@ final class ScheduleEditor
         if (count($wanted) !== count($current) || array_diff($current, $wanted) !== [] || count(array_unique($wanted)) !== count($wanted)) {
             throw new EditorException('occ_ErrInvalid');
         }
-        $this->transaction(function () use ($scheduleId, $wanted): void {
+        $this->transaction(function () use ($scheduleId, $wanted, $current): void {
             foreach ($wanted as $priority => $key) {
                 [$type, $id] = explode(':', $key);
                 $table = $type === 'roster' ? ScheduleRepository::ROSTERS : ScheduleRepository::ROTATIONS;
                 $this->module->prepare("UPDATE $table SET priority = ? WHERE id = ?")->execute([$priority + 1, (int)$id]);
             }
-            $this->audit($scheduleId, 'rules.order', null, ['order' => $wanted]);
+            $this->audit($scheduleId, 'rules.order', ['order' => $current], ['order' => $wanted]);
         });
     }
 
@@ -509,6 +520,10 @@ final class ScheduleEditor
         if ($a['members'] === $b['members']) {
             throw new EditorException('occ_ErrSwapSamePerson');
         }
+        if ($a['start_at'] < $b['end_at'] && $b['start_at'] < $a['end_at']) {
+            // Overlapping shifts can't be exchanged: the newer half would undo the older.
+            throw new EditorException('occ_ErrSwapOverlap');
+        }
 
         return $this->transaction(function () use ($scheduleId, $a, $b): array {
             $first = $this->insertOverride($scheduleId, $a, null);
@@ -533,10 +548,11 @@ final class ScheduleEditor
         $before = $this->requireRow(ScheduleRepository::OVERRIDES, $id, $scheduleId);
         $current = [
             'kind' => (string)$before['kind'], 'start_at' => (string)$before['start_at'], 'end_at' => (string)$before['end_at'],
-            'user_ids' => $this->userIdsOfMembers(ScheduleRepository::intList((string)$before['members'])),
             'destination' => (string)$before['destination'], 'note' => (string)$before['note'],
         ];
-        $row = $this->overrideRow($schedule, ['kind' => $current['kind']] + $data + $current);
+        // Moving or resizing keeps the people as they are, even someone whose extension is gone since.
+        $keepMembers = array_key_exists('user_ids', $data) ? null : (string)$before['members'];
+        $row = $this->overrideRow($schedule, ['kind' => $current['kind']] + $data + $current, $keepMembers);
         $this->transaction(function () use ($scheduleId, $id, $row, $before): void {
             $this->module->prepare('UPDATE ' . ScheduleRepository::OVERRIDES . ' SET start_at = ?, end_at = ?, members = ?,
                 destination = ?, note = ? WHERE id = ?')
@@ -552,6 +568,9 @@ final class ScheduleEditor
         $this->transaction(function () use ($scheduleId, $id, $before): void {
             $group = (int)$before['swap_group'];
             if ($group > 0) {
+                $stmt = $this->module->prepare('SELECT * FROM ' . ScheduleRepository::OVERRIDES . ' WHERE schedule_id = ? AND swap_group = ? ORDER BY id');
+                $stmt->execute([$scheduleId, $group]);
+                $before = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 $this->module->prepare('DELETE FROM ' . ScheduleRepository::OVERRIDES . ' WHERE schedule_id = ? AND swap_group = ?')
                     ->execute([$scheduleId, $group]);
             } else {
@@ -566,9 +585,10 @@ final class ScheduleEditor
      *
      * @param array<string, mixed> $schedule
      * @param array<string, mixed> $data
+     * @param string|null $keepMembers the stored members, kept as they are instead of validating user_ids
      * @return array{kind: string, start_at: string, end_at: string, members: string, destination: string, note: string}
      */
-    private function overrideRow(array $schedule, array $data): array
+    private function overrideRow(array $schedule, array $data, ?string $keepMembers = null): array
     {
         $kind = (string)($data['kind'] ?? '');
         if (!in_array($kind, [DutyResolver::KIND_COVER, DutyResolver::KIND_SWAP, DutyResolver::KIND_TAKEOVER, DutyResolver::KIND_ELSEWHERE], true)) {
@@ -587,6 +607,8 @@ final class ScheduleEditor
             if (!in_array($destination, self::scheduleDestinations($schedule), true)) {
                 throw new EditorException('occ_ErrElsewhere');
             }
+        } elseif ($keepMembers !== null) {
+            $members = $keepMembers;
         } else {
             $userIds = $this->employees($data['user_ids'] ?? []);
             if ($userIds === []) {
@@ -690,23 +712,6 @@ final class ScheduleEditor
     }
 
     /**
-     * @param list<int> $memberIds
-     * @return list<int>
-     */
-    private function userIdsOfMembers(array $memberIds): array
-    {
-        $users = [];
-        foreach ($memberIds as $memberId) {
-            $user = $this->value('SELECT user_id FROM ' . ScheduleRepository::MEMBERS . ' WHERE id = ?', [$memberId]);
-            if ($user !== null) {
-                $users[] = (int)$user;
-            }
-        }
-
-        return $users;
-    }
-
-    /**
      * Employees as a validated, de-duplicated list. Each must still exist and
      * have an internal extension.
      *
@@ -793,8 +798,40 @@ final class ScheduleEditor
         if ($number === $ownNumber || $type === null || !in_array($type, $allowed, true) || !DutyPublisher::isDestination($number)) {
             throw new EditorException('occ_ErrDestination', ['number' => $number]);
         }
+        if ($this->leadsBackTo($number, $ownNumber)) {
+            throw new EditorException('occ_ErrDestinationCircle', ['number' => $number]);
+        }
 
         return $number;
+    }
+
+    /**
+     * Whether calls sent to $number can come back to $ownNumber through this
+     * module's schedules (their final and outside-hours destinations), which
+     * would send them round in a circle. The dialplan has a hop limit as a
+     * backstop; this stops it being configured in the first place.
+     */
+    private function leadsBackTo(string $number, string $ownNumber): bool
+    {
+        $next = [];
+        foreach ($this->module->query('SELECT number, final_number, outside_number FROM ' . ScheduleRepository::SCHEDULES)->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $next[(string)$row['number']] = array_filter([(string)$row['final_number'], (string)$row['outside_number']]);
+        }
+        $seen = [];
+        $queue = [$number];
+        while ($queue !== []) {
+            $current = array_shift($queue);
+            if ($current === $ownNumber) {
+                return true;
+            }
+            if (isset($seen[$current]) || !isset($next[$current])) {
+                continue;
+            }
+            $seen[$current] = true;
+            array_push($queue, ...$next[$current]);
+        }
+
+        return false;
     }
 
     private function timezoneName(): string
@@ -887,14 +924,16 @@ final class ScheduleEditor
      */
     private function transaction(callable $work): mixed
     {
-        $this->module->beginTransaction();
+        // IMMEDIATE takes the write lock at once, so a second admin's change
+        // waits (busy_timeout) instead of failing when its lock is upgraded.
+        $this->module->exec('BEGIN IMMEDIATE');
         try {
             $result = $work();
-            $this->module->commit();
+            $this->module->exec('COMMIT');
 
             return $result;
         } catch (Throwable $e) {
-            $this->module->rollBack();
+            $this->module->exec('ROLLBACK');
             throw $e;
         }
     }
@@ -904,7 +943,8 @@ final class ScheduleEditor
     private static function name(mixed $name): string
     {
         $name = trim(preg_replace('/\s+/u', ' ', (string)$name) ?? '');
-        if ($name === '' || mb_strlen($name) > 60) {
+        // The core puts the name into its destination pickers as HTML, unescaped.
+        if ($name === '' || mb_strlen($name) > 60 || preg_match('/[<>&"]/', $name) === 1) {
             throw new EditorException('occ_ErrName');
         }
 

@@ -47,17 +47,24 @@ Who is on duty is not in the dialplan:
 
 1. **Deciding.** `Lib/DutyResolver` decides who is on duty at any moment from the schedule's plan: overrides first (the newest wins), then the first roster or rotation that covers the moment (lowest priority number; inside a roster the shift type lower in the list wins), else outside covered hours. A covered moment with nobody to ring is a gap. Times are wall-clock times in the PBX's time zone.
 2. **Publishing.** The worker (`Lib/WorkerOnCallCalendar`) writes each enabled schedule's current answer into AstDB (family `OnCallCalendar`): `start` (1, 2, out or go), `dial`, `goto` and `until`. It publishes at start, every minute, just after an answer stops being valid, and when the page asks after a change. `until` is never more than three minutes ahead.
-3. **Ringing.** The number's dialplan (`Lib/DialplanBuilder`) reads those values. A missing or expired answer is asked from `agi-bin/on_call_calendar_lookup.php`, which resolves from the database itself; if that fails too, the call is a gap. The people on duty are rung together through the core's `[internal-users]` context, with `FW_DISABLE`/`FW_DISABLE_INTERNAL` set so their own forwarding and voicemail can't take the call, then the backup person (the same way) or the backup queue (handed over with `Goto`, because a queue that plays music answers at once), then the final destination.
+3. **Ringing.** The number's dialplan (`Lib/DialplanBuilder`) reads those values. A missing or expired answer is asked from `agi-bin/on_call_calendar_lookup.php`, which resolves from the database itself; if that fails too, the call is a gap. The people on duty are rung together through the core's `[internal-users]` context, then the backup person (the same way) or the backup queue (handed over with `Goto`, because a queue that plays music answers at once), then the final destination. Each person's own forwarding is turned off for the call: `FW_DISABLE`/`FW_DISABLE_INTERNAL` stop the core forwarding after its Dial, and a channel variable `FW_TIME_<ext>` shadows their own "forward after N seconds", which the core would otherwise use as the phone's ring time.
 
 Other details the dialplan takes care of:
 
 - It clears `TIMEOUT(absolute)`, which `[internal-incoming]` sets to the route's timeout, so an answered call isn't cut off.
 - It clears `pt1c_UNIQUEID`, so every leg gets its own call record.
 - It adds the numbers to `[internal-transfer]`, so phones can transfer to them.
+- It counts how many schedules a call has passed through (`OCC_HOPS`); after five it goes to voicemail. The editor already refuses destinations that lead back to the same schedule, so this is only a backstop.
 
 A route's own dial timeout still limits the unanswered chain, which is why linking a route raises its timeout.
 
 Roster and override edits only change AstDB values, so they never reload Asterisk. A schedule's number or chain changes reload the dialplan.
+
+The worker writes all of a schedule's keys every minute and checks each write. When an answer changes, it sets `until` to 0 first and writes it last, so a call arriving mid-write asks the live lookup instead of mixing the old and new answer.
+
+## Changing the database
+
+The core creates the module's tables from the model annotations in `Models/`. It takes the columns from model metadata it caches in Redis for 10 minutes, so an update installed within that time can miss a new column; `Setup/PbxExtensionSetup::installDB()` therefore adds any column a model declares that its table lacks. That covers new columns. A change the core can't make by adding a column (renaming, moving data, new indexes on an existing table) needs a numbered migration step in the installer.
 
 ## Layout
 

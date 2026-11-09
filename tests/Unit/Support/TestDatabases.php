@@ -44,7 +44,8 @@ final class TestDatabases
         $pdo->exec('CREATE TABLE m_IncomingRoutingTable (id INTEGER PRIMARY KEY AUTOINCREMENT, rulename VARCHAR, number VARCHAR,
             extension VARCHAR, provider VARCHAR, priority INTEGER, timeout INTEGER, action VARCHAR, note VARCHAR, audio_message_id VARCHAR)');
         $pdo->exec('CREATE TABLE m_CallQueues (id INTEGER PRIMARY KEY AUTOINCREMENT, extension VARCHAR, name VARCHAR,
-            caller_hear VARCHAR, timeout_to_redirect_to_extension INTEGER, timeout_extension VARCHAR, redirect_to_extension_if_empty VARCHAR)');
+            caller_hear VARCHAR, timeout_to_redirect_to_extension INTEGER, timeout_extension VARCHAR, redirect_to_extension_if_empty VARCHAR,
+            redirect_to_extension_if_unanswered VARCHAR, redirect_to_extension_if_repeat_exceeded VARCHAR)');
         $pdo->exec('CREATE TABLE m_OutWorkTimes (id INTEGER PRIMARY KEY AUTOINCREMENT, extension VARCHAR, description VARCHAR)');
         $pdo->exec('CREATE TABLE m_IvrMenu (id INTEGER PRIMARY KEY AUTOINCREMENT, uniqid VARCHAR, extension VARCHAR, name VARCHAR, timeout_extension VARCHAR)');
         $pdo->exec('CREATE TABLE m_IvrMenuActions (id INTEGER PRIMARY KEY AUTOINCREMENT, ivr_menu_id VARCHAR, digits VARCHAR, extension VARCHAR)');

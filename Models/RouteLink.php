@@ -54,6 +54,14 @@ class RouteLink extends ModulesModelsBase
     public $linked_extension;
 
     /**
+     * The timeout the module set, so unlinking restores the previous one only
+     * if nobody changed it since.
+     *
+     * @Column(type="integer", nullable=true)
+     */
+    public $linked_timeout;
+
+    /**
      * @Column(type="integer", nullable=false)
      */
     public $linked_at;

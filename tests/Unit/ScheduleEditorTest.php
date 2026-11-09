@@ -116,6 +116,45 @@ final class ScheduleEditorTest extends TestCase
         $this->editor->createSchedule(['name' => 'Clash', 'number' => '201', 'template' => 'blank']);
     }
 
+    public function testAnotherModulesNumberIsTaken(): void
+    {
+        $this->core->exec("INSERT INTO m_Extensions (number, type) VALUES ('7000', 'MODULES')");
+
+        $this->expectRefusal('occ_ErrNumberTaken');
+        $this->editor->createSchedule(['name' => 'Clash', 'number' => '7000', 'template' => 'blank']);
+    }
+
+    public function testNamesThatWouldBreakTheCorePickersAreRefused(): void
+    {
+        $this->expectRefusal('occ_ErrName');
+        $this->editor->createSchedule(['name' => 'Support <L1>', 'number' => '2202', 'template' => 'blank']);
+    }
+
+    public function testDestinationDeletedInTheCoreDoesNotBlockOtherChanges(): void
+    {
+        $id = $this->shiftSchedule();
+        $this->editor->updateSchedule($id, ['final_number' => '2003']);
+        $this->core->exec("DELETE FROM m_Extensions WHERE number IN ('2003', '2000')");
+
+        $this->editor->updateSchedule($id, ['name' => 'Renamed', 'enabled' => false]);
+        self::assertSame('Renamed', $this->repository()->schedule($id)['name']);
+        // A new choice is checked as usual.
+        $this->expectRefusal('occ_ErrDestination');
+        $this->editor->updateSchedule($id, ['outside_number' => '2999']);
+    }
+
+    public function testACircleOfSchedulesIsRefused(): void
+    {
+        $this->core->exec("INSERT INTO m_Extensions (number, type) VALUES ('2202', 'MODULES'), ('2203', 'MODULES'), ('2204', 'MODULES')");
+        $a = $this->editor->createSchedule(['name' => 'A', 'number' => '2210', 'template' => 'blank']);
+        $this->core->exec("INSERT INTO m_Extensions (number, type) VALUES ('2210', 'MODULES')");
+        $b = $this->editor->createSchedule(['name' => 'B', 'number' => '2211', 'template' => 'blank', 'outside_number' => '2210']);
+        $this->core->exec("INSERT INTO m_Extensions (number, type) VALUES ('2211', 'MODULES')");
+
+        $this->expectRefusal('occ_ErrDestinationCircle');
+        $this->editor->updateSchedule($a, ['final_number' => '2211']);
+    }
+
     public function testSuggestedNumberSkipsTakenOnes(): void
     {
         $this->core->exec("INSERT INTO m_Extensions (number, type) VALUES ('2200', 'QUEUE'), ('2201', 'MODULES')");
@@ -241,6 +280,22 @@ final class ScheduleEditorTest extends TestCase
         self::assertSame([], $this->repository()->rosters($id)[0]['cells']);
     }
 
+    public function testRemovingAWeekdayFromAShiftClearsThatDaysCells(): void
+    {
+        $id = $this->shiftSchedule();
+        $roster = $this->repository()->rosters($id)[0]['id'];
+        [$morning] = array_column($this->repository()->shiftTypes($id), 'id');
+        $this->editor->setCell($id, $roster, $morning, 1, 1, [110]);
+        $this->editor->setCell($id, $roster, $morning, 1, 3, [111]);
+        $this->editor->saveShiftType($id, ['id' => $morning, 'name' => 'Morning', 'start' => '08:00', 'end' => '13:00', 'weekdays' => [2, 3, 4, 5]]);
+
+        self::assertSame([3], array_column($this->repository()->rosters($id)[0]['cells'], 'weekday'));
+        // Anna is planned nowhere now, so she can be removed.
+        $anna = array_values(array_filter($this->repository()->members($id, []), static fn (array $m): bool => $m['user_id'] === 110))[0];
+        $this->editor->removeMember($id, $anna['id']);
+        self::assertCount(1, $this->repository()->members($id, []));
+    }
+
     public function testShiftTypeValidation(): void
     {
         $id = $this->shiftSchedule();
@@ -268,6 +323,27 @@ final class ScheduleEditorTest extends TestCase
         $this->editor->deleteOverride($id, $a);
         self::assertSame(['201'], $this->resolveAt($id, '2026-11-11 09:00')->targets);
         self::assertSame(['202'], $this->resolveAt($id, '2026-11-11 14:00')->targets);
+    }
+
+    public function testSwapOfOverlappingShiftsIsRefused(): void
+    {
+        $id = $this->shiftSchedule();
+        $this->expectRefusal('occ_ErrSwapOverlap');
+        $this->editor->addSwap($id, ['user_a' => 110, 'start_a' => '2026-11-11 08:00', 'end_a' => '2026-11-11 13:00',
+            'user_b' => 111, 'start_b' => '2026-11-11 08:00', 'end_b' => '2026-11-11 13:00']);
+    }
+
+    public function testOverrideOfAPersonWhoLeftCanStillBeMoved(): void
+    {
+        $id = $this->shiftSchedule();
+        $o = $this->editor->addOverride($id, ['kind' => 'cover', 'start_at' => '2026-11-11 19:00', 'end_at' => '2026-11-11 20:00', 'user_ids' => [112]]);
+        $this->core->exec("DELETE FROM m_Extensions WHERE userid = 112");
+        $this->editor->updateOverride($id, $o, ['start_at' => '2026-11-11 20:00', 'end_at' => '2026-11-11 21:00']);
+
+        self::assertSame('2026-11-11 20:00', $this->repository()->overrides($id)[0]['start_at']);
+        // Choosing people again is checked as usual.
+        $this->expectRefusal('occ_ErrNoExtension');
+        $this->editor->updateOverride($id, $o, ['user_ids' => [112]]);
     }
 
     public function testOverrideCanBeMoved(): void

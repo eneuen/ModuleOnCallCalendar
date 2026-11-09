@@ -43,8 +43,8 @@ use Throwable;
  * request is forwarded to deniedAction() rather than stopped.
  *
  * Read actions are AJAX GETs. Write actions are AJAX POSTs with a JSON body
- * and a Bearer token, because the login cookie alone, as a cross-site form
- * would send it, must not change anything. All validation is in
+ * and a valid admin Bearer token, because the login cookie alone, as a
+ * cross-site form would send it, must not change anything. All validation is in
  * ScheduleEditor and RouteLinker; refusals come back translated. After a
  * change the worker is asked to publish who is on duty, and the dialplan
  * is reloaded when a schedule's number or chain changed.
@@ -250,25 +250,35 @@ class ModuleOnCallCalendarController extends BaseController
                 SystemMessages::sysLogMsg(self::class, 'Schedule number not registered: ' . $e->getMessage(), LOG_WARNING);
                 throw new EditorException('occ_ErrNumberTaken', ['number' => (string)$schedule['number']]);
             }
+            // The schedule exists from here on, so routes are linked one by one and failures reported, not thrown.
             $linker = $this->linker($module, $core);
+            $linkErrors = [];
             foreach (is_array($data['route_ids'] ?? null) ? $data['route_ids'] : [] as $routeId) {
-                $linker->link($schedule, (int)$routeId);
+                try {
+                    $linker->link($schedule, (int)$routeId);
+                } catch (EditorException $e) {
+                    $linkErrors[] = $this->translation->_($e->key, $e->params);
+                }
             }
 
-            return ['id' => $id];
+            return ['id' => $id, 'link_errors' => $linkErrors];
         }, true);
     }
 
     /** POST updateSchedule: id, and the fields to change (see ScheduleEditor::updateSchedule). */
     public function updateScheduleAction(): void
     {
-        $this->write(function (ScheduleEditor $editor, array $data, PDO $module): array {
+        $this->write(function (ScheduleEditor $editor, array $data, PDO $module, PDO $core): array {
             $id = (int)($data['id'] ?? 0);
             $before = (new ScheduleRepository($module))->schedule($id);
             $editor->updateSchedule($id, $data);
             $after = (new ScheduleRepository($module))->schedule($id);
             if ($before !== null && $after !== null && $before['name'] !== $after['name']) {
                 ScheduleNumbers::register((string)$after['number'], (string)$after['name']);
+            }
+            if ($after !== null) {
+                // Linked routes must still keep the call long enough for the changed chain.
+                $this->linker($module, $core)->refreshTimeouts($after);
             }
 
             return ['id' => $id];
@@ -294,6 +304,11 @@ class ModuleOnCallCalendarController extends BaseController
                 throw new EditorException('occ_ErrStillRouted', ['list' => $this->describeReferences($others)]);
             }
             $linker->unlinkAll($id);
+            // A route that couldn't be put back (it pointed here before it was linked) still sends calls here.
+            $left = $linker->references((string)$schedule['number']);
+            if ($left !== []) {
+                throw new EditorException('occ_ErrStillRouted', ['list' => $this->describeReferences($left)]);
+            }
             // The schedule first: its number can't be deleted while the schedule exists (see Schedule::getDynamicRelations()).
             $editor->deleteSchedule($id);
             $reasons = ScheduleNumbers::unregister((string)$schedule['number']);
@@ -482,9 +497,9 @@ class ModuleOnCallCalendarController extends BaseController
         } catch (EditorException $e) {
             $status = 400;
             $body = ['success' => false, 'message' => $this->translation->_($e->key, $e->params)];
-        } catch (InvalidArgumentException $e) {
+        } catch (InvalidArgumentException) {
             $status = 400;
-            $body = ['success' => false, 'message' => $e->getMessage()];
+            $body = ['success' => false, 'message' => $this->translation->_('occ_ErrInvalid')];
         } catch (Throwable $e) {
             $status = 500;
             $body = ['success' => false, 'message' => $this->translation->_('occ_ErrLoad')];
@@ -502,8 +517,11 @@ class ModuleOnCallCalendarController extends BaseController
      */
     private function write(callable $change, bool $reload = false): void
     {
+        // The token itself must be an admin's: the role check above also accepts the login cookie,
+        // which a cross-site request would carry.
         $auth = (string)$this->request->getHeader('Authorization');
-        if (!$this->request->isPost() || !$this->request->isAjax() || preg_match('/^Bearer \S+$/', $auth) !== 1) {
+        $tokenRole = $this->di->getShared(JwtProvider::SERVICE_NAME)->extractRoleFromHeader($auth === '' ? null : $auth);
+        if (!$this->request->isPost() || !$this->request->isAjax() || $tokenRole !== self::ADMIN_ROLE) {
             $this->send(403, ['success' => false, 'message' => $this->translation->_('occ_AccessDenied')]);
 
             return;

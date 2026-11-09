@@ -109,15 +109,33 @@ final class RouteLinker
         if ($link !== null && (int)$link['schedule_id'] !== (int)$schedule['id']) {
             throw new EditorException('occ_ErrRouteLinkedElsewhere');
         }
-        $timeout = max((int)$route['timeout'], $this->neededTimeout($schedule));
-        $error = ($this->saveRoute)($routeId, $number, $timeout);
-        if ($error !== null) {
-            throw new EditorException('occ_ErrRouteSave', ['reason' => $error]);
+        if ($link === null && (string)$route['extension'] === $number) {
+            // Already sent here by hand: there is nothing to put back on unlink.
+            throw new EditorException('occ_ErrRouteAlreadyHere');
         }
+        $timeout = self::raisedTimeout((int)$route['timeout'], $this->neededTimeout($schedule));
+        // The link is recorded before the route is changed and removed again if the change fails,
+        // so a changed route always has a record to put it back from.
         if ($link === null) {
             $this->module->prepare('INSERT INTO ' . ScheduleRepository::ROUTE_LINKS . ' (schedule_id, route_id, previous_extension,
-                previous_timeout, linked_extension, linked_at, linked_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
-                ->execute([(int)$schedule['id'], $routeId, (string)$route['extension'], (int)$route['timeout'], $number, $this->now, $this->actor]);
+                previous_timeout, linked_extension, linked_timeout, linked_at, linked_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                ->execute([(int)$schedule['id'], $routeId, (string)$route['extension'], (int)$route['timeout'], $number, $timeout,
+                    $this->now, $this->actor]);
+        }
+        try {
+            $error = ($this->saveRoute)($routeId, $number, $timeout);
+        } catch (\Throwable $e) {
+            $error = $e->getMessage();
+        }
+        if ($error !== null) {
+            if ($link === null) {
+                $this->module->prepare('DELETE FROM ' . ScheduleRepository::ROUTE_LINKS . ' WHERE route_id = ?')->execute([$routeId]);
+            }
+            throw new EditorException('occ_ErrRouteSave', ['reason' => $error]);
+        }
+        if ($link !== null) {
+            $this->module->prepare('UPDATE ' . ScheduleRepository::ROUTE_LINKS . ' SET linked_timeout = ? WHERE route_id = ?')
+                ->execute([$timeout, $routeId]);
         }
         $this->audit((int)$schedule['id'], 'route.link', ['route_id' => $routeId, 'extension' => $route['extension'], 'timeout' => (int)$route['timeout']],
             ['route_id' => $routeId, 'extension' => $number, 'timeout' => $timeout]);
@@ -135,12 +153,15 @@ final class RouteLinker
         if ($link === null || (int)$link['schedule_id'] !== $scheduleId) {
             throw new EditorException('occ_ErrNotFound');
         }
-        $route = $this->core->prepare('SELECT extension FROM m_IncomingRoutingTable WHERE id = ?');
+        $route = $this->core->prepare('SELECT extension, timeout FROM m_IncomingRoutingTable WHERE id = ?');
         $route->execute([$routeId]);
-        $current = $route->fetchColumn();
+        $row = $route->fetch(PDO::FETCH_ASSOC);
+        $current = $row === false ? false : (string)$row['extension'];
         $restored = false;
-        if ($current !== false && (string)$current === (string)$link['linked_extension']) {
-            $error = ($this->saveRoute)($routeId, (string)$link['previous_extension'], (int)$link['previous_timeout']);
+        if ($row !== false && $current === (string)$link['linked_extension']) {
+            // The timeout too, unless an admin changed it since the link.
+            $timeout = (int)$row['timeout'] === (int)$link['linked_timeout'] ? (int)$link['previous_timeout'] : (int)$row['timeout'];
+            $error = ($this->saveRoute)($routeId, (string)$link['previous_extension'], $timeout);
             if ($error !== null) {
                 throw new EditorException('occ_ErrRouteSave', ['reason' => $error]);
             }
@@ -154,8 +175,31 @@ final class RouteLinker
     }
 
     /**
-     * Unlinks every route of a schedule (before deleting it, or before the
-     * module is disabled).
+     * After a schedule's chain changed: raises the timeout of every route
+     * linked to it (and still pointing at it) where the chain no longer fits.
+     */
+    public function refreshTimeouts(array $schedule): void
+    {
+        $needed = $this->neededTimeout($schedule);
+        foreach ($this->routes() as $route) {
+            if ($route['linked_schedule_id'] !== (int)$schedule['id'] || $route['changed_outside']) {
+                continue;
+            }
+            $timeout = self::raisedTimeout($route['timeout'], $needed);
+            if ($timeout !== $route['timeout']) {
+                $this->link($schedule, $route['id']);
+            }
+        }
+    }
+
+    /** A route timeout long enough for the chain; 0 or empty (no limit) stays as it is. */
+    private static function raisedTimeout(int $current, int $needed): int
+    {
+        return $current <= 0 ? $current : max($current, $needed);
+    }
+
+    /**
+     * Unlinks every route of a schedule, before it is deleted.
      *
      * @return int how many routes were restored
      */
@@ -172,9 +216,10 @@ final class RouteLinker
     }
 
     /**
-     * Everything in the core that sends calls to a schedule's number:
-     * incoming routes (linked or set by hand), off-work time rules, IVR menu
-     * options and timeouts, queue redirects and employees' forwarding.
+     * Everything that sends calls to a schedule's number: incoming routes
+     * (linked or set by hand), off-work time rules, IVR menu options and
+     * timeouts, queue redirects, employees' forwarding, and this module's
+     * other schedules (chain destinations and "send elsewhere" overrides).
      *
      * @return list<array{kind: string, id: int, name: string}>
      */
@@ -186,7 +231,8 @@ final class RouteLinker
             'offwork'    => "SELECT id, COALESCE(NULLIF(description, ''), id) AS name FROM m_OutWorkTimes WHERE extension = ?",
             'ivr'        => 'SELECT DISTINCT m.id, m.name FROM m_IvrMenu m LEFT JOIN m_IvrMenuActions a ON a.ivr_menu_id = m.uniqid
                              WHERE m.timeout_extension = ? OR a.extension = ?',
-            'queue'      => 'SELECT id, name FROM m_CallQueues WHERE timeout_extension = ? OR redirect_to_extension_if_empty = ?',
+            'queue'      => 'SELECT id, name FROM m_CallQueues WHERE timeout_extension = ? OR redirect_to_extension_if_empty = ?
+                             OR redirect_to_extension_if_unanswered = ? OR redirect_to_extension_if_repeat_exceeded = ?',
             'forwarding' => 'SELECT id, extension AS name FROM m_ExtensionForwardingRights WHERE forwarding = ? OR forwardingonbusy = ?
                              OR forwardingonunavailable = ?',
         ];
@@ -201,6 +247,15 @@ final class RouteLinker
             foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
                 $found[] = ['kind' => $kind, 'id' => (int)$row['id'], 'name' => (string)$row['name']];
             }
+        }
+        // Other schedules of this module: their chain, and "send elsewhere" overrides not yet over.
+        $stmt = $this->module->prepare('SELECT DISTINCT s.id, s.name FROM ' . ScheduleRepository::SCHEDULES . ' s
+            LEFT JOIN ' . ScheduleRepository::OVERRIDES . " o ON o.schedule_id = s.id AND o.kind = 'elsewhere' AND o.destination = ?
+            WHERE s.number != ? AND (s.final_number = ? OR s.outside_number = ? OR (s.backup_type = 'queue' AND s.backup_number = ?)
+                OR o.id IS NOT NULL)");
+        $stmt->execute([$number, $number, $number, $number, $number]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $found[] = ['kind' => 'schedule', 'id' => (int)$row['id'], 'name' => (string)$row['name']];
         }
 
         return $found;
