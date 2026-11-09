@@ -286,17 +286,20 @@ def busy_phone_skipped(p, c):
     a.hangup(); x.hangup(); pause(2)
 
 
-@scenario("301 forwards to 303 after 5 s, but on duty its forwarding is skipped: 303 never rings, the backup 304 does.")
+@scenario("301 forwards to 303 after 5 s, but on duty its forwarding is skipped: it rings the schedule's full 15 s, "
+          "303 never rings, then the backup 304 does.")
 def own_forwarding_skipped(p, c):
-    p.reset(backup_type="member", backup_user_id=p.users["304"])
+    p.reset(ring_seconds=15, backup_type="member", backup_user_id=p.users["304"])
     p.override("cover", "301")
     p.wait_published("1", dial_of("301"))
     with forwarding("301", "303", ringlength=5):
         a, b1, b3, b4 = Line("305"), Line("301"), Line("303"), Line("304")
         t0 = time.time(); a.dial(PROBE_NUMBER)
         c.that(rang(b1, 8), "301 rings")
-        c.that(not rang(b3, 9), "303 (301's forwarding) does not ring")
-        c.that(rang(b4, 8), f"304 (backup) rings, after {time.time() - t0:.0f} s")
+        c.that(not rang(b3, 12), "303 (301's forwarding) does not ring")
+        c.that(rang(b4, 10), "304 (backup) rings")
+        waited = time.time() - t0
+        c.that(waited >= 14, f"301 rang the schedule's 15 s, not its own 5 s (backup after {waited:.0f} s)")
         a.hangup(); pause(2)
 
 
