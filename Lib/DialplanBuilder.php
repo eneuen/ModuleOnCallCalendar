@@ -16,13 +16,16 @@ namespace Modules\ModuleOnCallCalendar\Lib;
  * changes never need a dialplan reload:
  *
  *   <id>/dial   the dial string for step 1, e.g. Local/104@internal-users/n
- *   <id>/start  where the call starts: 1 (on duty), 2 (gap: backup) or out
- *               (outside covered hours)
+ *   <id>/start  where the call starts: 1 (on duty), 2 (gap: backup), out
+ *               (outside covered hours) or go (a "send elsewhere" override)
+ *   <id>/goto   for go: the number to send the call to
  *   <id>/until  epoch seconds after which the answer is stale
  *
- * A stale or missing answer is treated as a gap, so the call goes to the
- * backup and then the final destination rather than to someone who may no
- * longer be on duty.
+ * DutyPublisher writes these values. A stale or missing answer is asked
+ * again from the AGI script LOOKUP_AGI, which reads the database itself. If
+ * that fails too, the call is treated as a gap and goes to the backup and
+ * then the final destination, rather than to someone who may no longer be
+ * on duty.
  *
  * Each number's entry:
  * - clears the absolute timeout that [internal-incoming] puts on the channel,
@@ -44,6 +47,8 @@ namespace Modules\ModuleOnCallCalendar\Lib;
 final class DialplanBuilder
 {
     public const string FAMILY = 'OnCallCalendar';
+
+    public const string LOOKUP_AGI = 'on_call_calendar_lookup.php';
 
     /**
      * Entries for [internal], one per enabled schedule.
@@ -99,9 +104,13 @@ final class DialplanBuilder
             'same => n,Set(__pt1c_UNIQUEID=${UNDEFINED})',
             "same => n,Set(OCC_START=\${DB($key/start)})",
             "same => n,Set(OCC_DIAL=\${DB($key/dial)})",
-            // A stale or missing answer counts as a gap: backup, then final.
-            "same => n,ExecIf(\$[\${EPOCH} >= 0\${DB($key/until)}]?Set(OCC_START=2))",
-            'same => n,GotoIf($["${OCC_START}" == "out"]?outside)',
+            "same => n,Set(OCC_GOTO=\${DB($key/goto)})",
+            // A stale or missing answer: ask the AGI fallback; if that fails it stays a gap.
+            "same => n,GotoIf(\$[\${EPOCH} < 0\${DB($key/until)}]?fresh)",
+            'same => n,Set(OCC_START=2)',
+            'same => n,AGI(' . self::LOOKUP_AGI . ",$id)",
+            'same => n(fresh),GotoIf($["${OCC_START}" == "out"]?outside)',
+            'same => n,GotoIf($["${OCC_START}" == "go" & "${OCC_GOTO}x" != "x"]?elsewhere)',
             'same => n,GotoIf($["${OCC_START}" != "1" | "${OCC_DIAL}x" == "x"]?backup)',
             ...self::ringWithoutForwarding('${OCC_DIAL}', $ring),
             'same => n,GotoIf($["${DIALSTATUS}" == "ANSWER"]?done)',
@@ -109,6 +118,7 @@ final class DialplanBuilder
             ...self::backup($s),
             "same => n(final),Goto(internal,$final,1)",
             "same => n(outside),Goto(internal,$outside,1)",
+            'same => n(elsewhere),Goto(internal,${OCC_GOTO},1)',
             'same => n(done),Hangup()',
         ];
 

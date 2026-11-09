@@ -25,7 +25,12 @@ final class DialplanBuilderTest extends TestCase
         self::assertStringContainsString('Set(TIMEOUT(absolute)=0)', $plan);
         self::assertStringContainsString('Set(__pt1c_UNIQUEID=${UNDEFINED})', $plan);
         self::assertStringContainsString('Set(OCC_DIAL=${DB(OnCallCalendar/7/dial)})', $plan);
-        self::assertStringContainsString('ExecIf($[${EPOCH} >= 0${DB(OnCallCalendar/7/until)}]?Set(OCC_START=2))', $plan);
+        self::assertStringContainsString(
+            "GotoIf(\$[\${EPOCH} < 0\${DB(OnCallCalendar/7/until)}]?fresh)\n\tsame => n,Set(OCC_START=2)\n\tsame => n,AGI(on_call_calendar_lookup.php,7)\n\tsame => n(fresh),",
+            $plan
+        );
+        self::assertStringContainsString('GotoIf($["${OCC_START}" == "go" & "${OCC_GOTO}x" != "x"]?elsewhere)', $plan);
+        self::assertStringContainsString('same => n(elsewhere),Goto(internal,${OCC_GOTO},1)', $plan);
         self::assertMatchesRegularExpression(
             '/Set\(__FW_DISABLE=1\)\n\tsame => n,Set\(__FW_DISABLE_INTERNAL=1\)\n\tsame => n,Dial\(\$\{OCC_DIAL\},20\)\n\tsame => n,Set\(__FW_DISABLE=\)/',
             $plan

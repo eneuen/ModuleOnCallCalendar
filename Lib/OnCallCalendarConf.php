@@ -6,11 +6,12 @@ declare(strict_types=1);
 
 namespace Modules\ModuleOnCallCalendar\Lib;
 
+use MikoPBX\Core\System\BeanstalkClient;
 use MikoPBX\Core\System\SystemMessages;
+use MikoPBX\Core\Workers\Cron\WorkerSafeScriptsCore;
 use MikoPBX\Core\Workers\Libs\WorkerModelsEvents\Actions\ReloadDialplanAction;
 use MikoPBX\Core\Workers\WorkerModelsEvents;
 use MikoPBX\Modules\Config\ConfigClass;
-use Modules\ModuleOnCallCalendar\Models\Schedule;
 use Throwable;
 
 /**
@@ -24,6 +25,9 @@ class OnCallCalendarConf extends ConfigClass
 {
     public const string MODULE_ID = 'ModuleOnCallCalendar';
 
+    /** Requests from the module page to the worker (the web process has no AMI connection). */
+    public const string COMMANDS_TUBE = 'ModuleOnCallCalendar-commands';
+
     /** Each schedule's number, in [internal]: reached by routes, rules, IVRs and colleagues. */
     public function extensionGenInternal(): string
     {
@@ -34,6 +38,32 @@ class OnCallCalendarConf extends ConfigClass
     public function extensionGenInternalTransfer(): string
     {
         return DialplanBuilder::internalTransfer($this->schedules());
+    }
+
+    /** The worker that keeps who is on duty published in AstDB. */
+    public function getModuleWorkers(): array
+    {
+        return [
+            [
+                'type'   => WorkerSafeScriptsCore::CHECK_BY_BEANSTALK,
+                'worker' => WorkerOnCallCalendar::class,
+            ],
+        ];
+    }
+
+    /**
+     * Asks the worker to publish who is on duty now, after a change. If the
+     * worker can't be reached the change still takes effect: the published
+     * answers expire within DutyPublisher::MAX_AGE and calls then use the
+     * AGI fallback.
+     */
+    public static function requestPublish(): void
+    {
+        try {
+            (new BeanstalkClient(self::COMMANDS_TUBE))->publish('publish');
+        } catch (Throwable $e) {
+            SystemMessages::sysLogMsg(static::class, 'Could not ask the worker to publish: ' . $e->getMessage(), LOG_WARNING);
+        }
     }
 
     /** Enabling a module doesn't reload the dialplan by itself. */
@@ -52,7 +82,7 @@ class OnCallCalendarConf extends ConfigClass
     private function schedules(): array
     {
         try {
-            return array_values(Schedule::find(['order' => 'id'])->toArray());
+            return (new ScheduleRepository(Databases::openReadOnly(ModuleContext::moduleDbFile())))->schedules();
         } catch (Throwable $e) {
             SystemMessages::sysLogMsg(static::class, 'Schedules not read: ' . $e->getMessage(), LOG_ERR);
 

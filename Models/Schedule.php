@@ -23,7 +23,8 @@ use Phalcon\Mvc\Model\Relation;
  * Outside covered hours the call goes to outside_number, or to the final
  * destination when that is empty.
  *
- * The core creates the table from these annotations.
+ * The core creates the table from these annotations; the module reads and
+ * writes it with plain SQL (ScheduleRepository, ScheduleEditor).
  *
  * @Indexes(
  *     [name='unique_number', columns=['number'], type='UNIQUE']
@@ -86,6 +87,22 @@ class Schedule extends ModulesModelsBase
      * @Column(type="string", nullable=true)
      */
     public $outside_number = '';
+
+    /**
+     * The template the schedule started from: shift, oncall or blank. Only
+     * decides defaults and how the calendar opens.
+     *
+     * @Column(type="string", nullable=true)
+     */
+    public $template = 'blank';
+
+    /**
+     * A sound file (the core's m_SoundFiles id) played to the caller before
+     * the person on duty is rung; empty for none.
+     *
+     * @Column(type="integer", nullable=true)
+     */
+    public $greeting_sound_id;
 
     /**
      * @Column(type="string", length=1, nullable=false, default="1")
