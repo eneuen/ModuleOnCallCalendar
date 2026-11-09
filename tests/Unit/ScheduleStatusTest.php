@@ -33,5 +33,14 @@ final class ScheduleStatusTest extends TestCase
         // Tuesday to Friday mornings of both weeks are empty (Mondays are Anna): 8 mornings of 5 hours.
         self::assertSame(8 * 5 * 3600, $status['gap_seconds']);
         self::assertSame((new DateTimeImmutable('2026-11-10 08:00', $tz))->getTimestamp(), $status['first_gap']);
+        self::assertTrue($status['planned']);
+    }
+
+    public function testAnEmptyPlanIsNotCovered(): void
+    {
+        $status = ScheduleStatus::of(['members' => []], new DateTimeZone('UTC'), 1794393600);
+
+        self::assertFalse($status['planned']);
+        self::assertSame(0, $status['gap_seconds']);
     }
 }

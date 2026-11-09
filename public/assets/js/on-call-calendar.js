@@ -6,6 +6,7 @@
   var sub = (text, values) => Object.entries(values).reduce((s, [k, v]) => s.split(`%${k}%`).join(String(v)), text);
   var LOCALE = document.documentElement.lang || void 0;
   var WEEKDAYS = [1, 2, 3, 4, 5, 6, 7];
+  var TABS = ["calendar", "roster", "rotation", "settings", "activity"];
   var weekdayName = (d) => t(`occ_Weekday${d}`);
   var state = {
     options: null,
@@ -17,8 +18,12 @@
     rosterId: 0,
     rosterWeek: 1,
     calendar: null,
-    pendingCover: null
-    // "Cover now" from the home page, opened once the calendar is shown
+    pendingCover: null,
+    // "Cover now" from the home page: {scheduleId, to}, opened once that schedule's calendar is shown
+    clockOffset: 0,
+    // PBX clock minus the browser's, in seconds
+    notice: ""
+    // a warning to show once the next view has loaded
   };
   var $id = (id) => document.getElementById(id);
   function el(tag, attrs = {}, ...children) {
@@ -38,19 +43,35 @@
   }
   var fill = (node, ...children) => node.replaceChildren(...children.flat().filter((c) => c !== null && c !== void 0 && c !== false));
   function button(text, onclick, cls = "", icon = "") {
-    return el("button", { type: "button", class: `ui ${cls} button`, onclick }, icon ? el("i", { class: `${icon} icon` }) : null, text);
+    const node = el("button", {
+      type: "button",
+      class: `ui ${cls} button`,
+      onclick: (e) => {
+        if (node.classList.contains("loading")) return;
+        const result = onclick(e);
+        if (result && typeof result.then === "function") {
+          node.classList.add("loading", "disabled");
+          const done = () => node.classList.remove("loading", "disabled");
+          result.then(done, done);
+        }
+      }
+    }, icon ? el("i", { class: `${icon} icon` }) : null, text);
+    return node;
   }
   function select(options, value, attrs = {}) {
+    const current = String(value != null ? value : "");
+    const list = current !== "" && !options.some(([v]) => String(v) === current) ? [[current, sub(t("occ_Missing"), { value: current })], ...options] : options;
     return el(
       "select",
       { class: "ui dropdown", ...attrs },
-      options.map(([v, text]) => el("option", { value: String(v), selected: String(v) === String(value != null ? value : "") }, text))
+      list.map(([v, text]) => el("option", { value: String(v), selected: String(v) === current }, text))
     );
   }
   function field(labelText, control, hint) {
     return el("div", { class: "field" }, el("label", { text: labelText }), control, hint ? el("div", { class: "occ-hint", text: hint }) : null);
   }
   function showError(text) {
+    if (document.querySelector(".occ-modal.active")) return;
     const box = $id("occ-error");
     box.textContent = text;
     box.classList.remove("occ-hidden");
@@ -75,8 +96,29 @@
     clearError();
     return $.ajax({ url: BASE + action, method: "POST", data: JSON.stringify(data), contentType: "application/json", dataType: "json" }).then((r) => r && r.success ? r.data : $.Deferred().reject({ responseJSON: r })).fail((xhr) => showError(failText(xhr, "occ_ErrSave")));
   }
-  function dialog(title, body, onSave, saveText = t("occ_Save"), extraButtons = []) {
+  function dialog(title, body, onSave, saveText = t("occ_Save"), extraActions = []) {
     const error = el("div", { class: "ui negative message occ-hidden" });
+    const fail = (xhr) => {
+      clearError();
+      error.textContent = failText(xhr, "occ_ErrSave");
+      error.classList.remove("occ-hidden");
+    };
+    const run = (action) => {
+      error.classList.add("occ-hidden");
+      return action().then(() => $(modal).modal("hide"), fail);
+    };
+    const extras = extraActions.map(({ text, action }) => {
+      let armed = false;
+      const node = button(text, () => {
+        if (!armed) {
+          armed = true;
+          node.lastChild.textContent = t("occ_ConfirmDelete");
+          return null;
+        }
+        return run(action);
+      }, "basic red");
+      return node;
+    });
     const modal = el(
       "div",
       { class: "ui small modal occ-modal" },
@@ -85,20 +127,13 @@
       el(
         "div",
         { class: "actions" },
-        extraButtons,
+        extras,
         button(t("occ_Cancel"), () => $(modal).modal("hide"), "basic"),
-        onSave ? button(saveText, () => {
-          error.classList.add("occ-hidden");
-          onSave().then(() => $(modal).modal("hide"), (xhr) => {
-            clearError();
-            error.textContent = failText(xhr, "occ_ErrSave");
-            error.classList.remove("occ-hidden");
-          });
-        }, "primary") : null
+        onSave ? button(saveText, () => run(onSave), "primary") : null
       )
     );
     document.body.append(modal);
-    $(modal).modal({ autofocus: false, onHidden: () => modal.remove() }).modal("show");
+    $(modal).modal({ autofocus: false, allowMultiple: true, onHidden: () => modal.remove() }).modal("show");
     return modal;
   }
   function confirmDialog(text, onYes, yesText = t("occ_Delete")) {
@@ -129,6 +164,7 @@
       weekday: "short",
       hour: "2-digit",
       minute: "2-digit",
+      hourCycle: "h23",
       ...withDate ? { day: "numeric", month: "short" } : {}
     });
   }
@@ -169,7 +205,7 @@
     if (view === "schedule" && Number(id) > 0) {
       const same = state.detail && state.detail.schedule.id === Number(id);
       state.scheduleId = Number(id);
-      state.tab = tab || state.tab || "calendar";
+      state.tab = TABS.includes(tab) ? tab : "calendar";
       if (same) renderSchedule();
       else openSchedule();
     } else if (view === "new") {
@@ -183,6 +219,7 @@
     else window.location.hash = hash;
   };
   function showHome() {
+    state.detail = null;
     const root = $id("occ-main");
     fill(root, el("div", { class: "ui active centered inline loader" }));
     get("overview").then((data) => {
@@ -207,7 +244,10 @@
   }
   function decisionText(decision, schedule, members) {
     if (!decision) return "\u2014";
-    if (decision.start === "1") return memberNames(decision.member_ids, members).join(", ");
+    if (decision.start === "1") {
+      const rung = decision.member_ids.filter((id) => (members.find((m) => m.id === id) || {}).extension);
+      return memberNames(rung, members).join(", ");
+    }
     if (decision.start === "2") {
       const backup = schedule.backup_type === "queue" ? destinationName(schedule.backup_number) : schedule.backup_type === "member" ? employeeName(schedule.backup_user_id) : destinationName(schedule.final_number);
       return sub(t("occ_GapGoesTo"), { target: backup });
@@ -218,7 +258,7 @@
   function scheduleCard({ schedule, members, status, references }) {
     const now = status.now;
     const nowClass = now.start === "1" ? "occ-now-on" : now.start === "2" ? "occ-now-gap" : "occ-now-off";
-    const coverage = status.gap_now ? el("span", { class: "ui red label", text: t("occ_GapNow") }) : status.gap_seconds > 0 ? el("a", { class: "ui orange label", href: `#/schedule/${schedule.id}/calendar`, text: sub(t("occ_GapsComing"), { hours: hours(status.gap_seconds) }) }) : el("span", { class: "ui green label", text: t("occ_Covered14") });
+    const coverage = status.gap_now ? el("span", { class: "ui red label", text: t("occ_GapNow") }) : !status.planned ? el("span", { class: "ui grey label", text: t("occ_NothingPlanned") }) : status.gap_seconds > 0 ? el("a", { class: "ui orange label", href: `#/schedule/${schedule.id}/calendar`, text: sub(t("occ_GapsComing"), { hours: hours(status.gap_seconds) }) }) : el("span", { class: "ui green label", text: t("occ_Covered14") });
     const wiring = references.length ? el("span", { class: "ui basic label", text: sub(t("occ_RoutedFrom"), { n: references.length }) }) : el("span", { class: "ui basic orange label", text: t("occ_NotReachable") });
     return el(
       "div",
@@ -227,7 +267,7 @@
         "div",
         { class: "content" },
         el("div", { class: "header" }, el("a", { href: `#/schedule/${schedule.id}/calendar`, text: `${schedule.name} \xB7 ${schedule.number}` })),
-        el("div", { class: "meta" }, t(`occ_Template_${schedule.template || "blank"}`), schedule.enabled === "1" ? null : ` \xB7 ${t("occ_Disabled")}`),
+        el("div", { class: "meta" }, t(`occ_Template_${schedule.template || "blank"}`), String(schedule.enabled) === "1" ? null : ` \xB7 ${t("occ_Disabled")}`),
         el(
           "div",
           { class: `description occ-now ${nowClass}` },
@@ -252,7 +292,7 @@
           "span",
           { class: "right floated" },
           button(t("occ_CoverNow"), () => {
-            state.pendingCover = { from: Math.floor(Date.now() / 1e3), to: now.to };
+            state.pendingCover = { scheduleId: schedule.id, to: now.to };
             go(`#/schedule/${schedule.id}/calendar`);
           }, "mini basic")
         )
@@ -260,6 +300,7 @@
     );
   }
   function showWizard() {
+    state.detail = null;
     const o = state.options;
     const form = {
       template: "shift",
@@ -267,7 +308,7 @@
       number: o.suggested_number,
       routeIds: [],
       ring: 20,
-      backupType: "queue",
+      backupType: o.queues.length ? "queue" : "",
       backupNumber: (o.queues[0] || {}).number || "",
       backupUser: "",
       backupRing: 20,
@@ -287,7 +328,7 @@
         form.template = tpl;
         form.ring = tpl === "oncall" ? 25 : 20;
         form.backupRing = form.ring;
-        form.backupType = tpl === "shift" ? "queue" : tpl === "oncall" ? "member" : "";
+        form.backupType = tpl === "shift" && o.queues.length ? "queue" : tpl === "oncall" ? "member" : "";
         $id("occ-w-ring").value = form.ring;
         renderTemplates();
         renderBackup();
@@ -446,8 +487,9 @@
             if (form.template === "oncall" && form.people.length) {
               data.rotation = { user_ids: form.people, first_handover: form.handover, turn_days: form.turnDays, active_hours: o.oncall_hours };
             }
-            post("createSchedule", data).then((r) => {
-              refreshOptions().then(() => go(`#/schedule/${r.id}/${form.template === "oncall" ? "rotation" : form.template === "shift" ? "roster" : "settings"}`));
+            return post("createSchedule", data).then((r) => {
+              if (r.link_errors && r.link_errors.length) state.notice = r.link_errors.join(" ");
+              return refreshOptions().then(() => go(`#/schedule/${r.id}/${form.template === "oncall" ? "rotation" : form.template === "shift" ? "roster" : "settings"}`));
             });
           }, "primary", "check")
         )
@@ -458,8 +500,8 @@
     renderBackup();
   }
   function nextFriday() {
-    const now = /* @__PURE__ */ new Date(wall(Math.floor(Date.now() / 1e3)) + "Z");
-    const add = (5 - now.getUTCDay() + 7) % 7;
+    const now = /* @__PURE__ */ new Date(wall(Math.floor(Date.now() / 1e3) + state.clockOffset) + "Z");
+    const add = (5 - now.getUTCDay() + 7) % 7 || (now.getUTCHours() >= 17 ? 7 : 0);
     now.setUTCDate(now.getUTCDate() + add);
     return `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} 17:00`;
   }
@@ -499,14 +541,20 @@
   function openSchedule() {
     const root = $id("occ-main");
     fill(root, el("div", { class: "ui active centered inline loader" }));
-    loadDetail().then(() => renderSchedule());
+    loadDetail().then(() => {
+      renderSchedule();
+      if (state.notice) {
+        showError(state.notice);
+        state.notice = "";
+      }
+    });
   }
   var loadDetail = () => get("schedule", { id: state.scheduleId }).then((d) => {
     state.detail = d;
   });
   function renderSchedule() {
     const { schedule } = state.detail;
-    const tabs = ["calendar", "roster", "rotation", "settings", "activity"];
+    const tabs = TABS;
     const body = el("div", { class: "occ-tab-body" });
     fill(
       $id("occ-main"),
@@ -515,7 +563,7 @@
         { class: "occ-toolbar" },
         button(t("occ_AllSchedules"), () => go("#/"), "basic", "left arrow"),
         el("h3", { class: "ui header occ-title", text: `${schedule.name} \xB7 ${schedule.number}` }),
-        schedule.enabled === "1" ? null : el("span", { class: "ui grey label", text: t("occ_Disabled") })
+        String(schedule.enabled) === "1" ? null : el("span", { class: "ui grey label", text: t("occ_Disabled") })
       ),
       el("div", { class: "ui top attached tabular menu" }, tabs.map((tab) => el("a", {
         class: `item ${state.tab === tab ? "active" : ""}`,
@@ -582,17 +630,22 @@
     });
     state.calendar = calendar;
     calendar.render();
-    if (state.pendingCover) {
-      const { from, to } = state.pendingCover;
-      state.pendingCover = null;
-      coverDialog(from, to);
+    const pending = state.pendingCover;
+    state.pendingCover = null;
+    if (pending && pending.scheduleId === schedule.id) {
+      const now = Math.floor(Date.now() / 1e3) + state.clockOffset;
+      coverDialog(now, pending.to > now ? pending.to : now + 3600);
     }
   }
   function calendarEvents(data, schedule, members) {
     const events = [];
     data.segments.forEach((s, i) => {
-      if (s.decided_by === "override" || s.start === "out") return;
+      if (s.start === "out") return;
       const range = { start: wall(s.from), end: wall(s.to) };
+      if (s.decided_by === "override") {
+        if (s.start === "2") events.push({ ...range, id: `ogap-${i}`, display: "background", classNames: ["occ-ev-gap"] });
+        return;
+      }
       if (s.start === "2") {
         events.push({ ...range, id: `gap-${i}`, display: "background", classNames: ["occ-ev-gap"] });
         events.push({
@@ -704,7 +757,7 @@
       form.users = list;
       renderWho();
     }), t("occ_RingTogether")));
-    const kinds = existing ? [[form.kind, t(`occ_Kind_${form.kind}`)]] : [["cover", t("occ_Kind_cover")], ["takeover", t("occ_Kind_takeover")], ["elsewhere", t("occ_Kind_elsewhere")]];
+    const kinds = existing ? [[form.kind, t(`occ_Kind_${form.kind}`)]] : [["cover", t("occ_Kind_cover")], ["elsewhere", t("occ_Kind_elsewhere")]];
     const body = el(
       "div",
       {},
@@ -735,16 +788,11 @@
       body,
       () => (existing ? post("updateOverride", { id: schedule.id, override_id: override.id, override: payload() }) : post("addOverride", { id: schedule.id, override: payload() })).then(done),
       t("occ_Save"),
-      existing ? [button(t("occ_Delete"), () => {
-        post("deleteOverride", { id: schedule.id, override_id: override.id }).then(() => {
-          $(".occ-modal").modal("hide");
-          done();
-        });
-      }, "basic red")] : []
+      existing ? [{ text: t("occ_Delete"), action: () => post("deleteOverride", { id: schedule.id, override_id: override.id }).then(done) }] : []
     );
   }
   function swapDialog(rangeA, userA) {
-    const form = { userB: "", startB: rangeA.start_at, endB: rangeA.end_at, note: "" };
+    const form = { userB: "", startB: "", endB: "", note: "" };
     const body = el(
       "div",
       {},
@@ -755,10 +803,10 @@
       el(
         "div",
         { class: "two fields" },
-        field(t("occ_TheirShiftFrom"), el("input", { type: "datetime-local", value: toInput(form.startB), oninput: (e) => {
+        field(t("occ_TheirShiftFrom"), el("input", { type: "datetime-local", oninput: (e) => {
           form.startB = fromInput(e.target.value);
         } })),
-        field(t("occ_To"), el("input", { type: "datetime-local", value: toInput(form.endB), oninput: (e) => {
+        field(t("occ_To"), el("input", { type: "datetime-local", oninput: (e) => {
           form.endB = fromInput(e.target.value);
         } }))
       ),
@@ -833,6 +881,7 @@
         class: `item ${r.id === roster.id ? "active" : ""}`,
         onclick: () => {
           state.rosterId = r.id;
+          state.rosterWeek = 1;
           renderSchedule();
         },
         text: rosterLabel(r)
@@ -957,10 +1006,7 @@
         return refresh();
       }),
       t("occ_Save"),
-      roster.id ? [button(t("occ_Delete"), () => post("deleteRoster", { id: state.scheduleId, roster_id: roster.id }).then(() => {
-        $(".occ-modal").modal("hide");
-        refresh();
-      }), "basic red")] : []
+      roster.id ? [{ text: t("occ_Delete"), action: () => post("deleteRoster", { id: state.scheduleId, roster_id: roster.id }).then(refresh) }] : []
     );
   }
   function renderRotation(body) {
@@ -1001,12 +1047,14 @@
     const step = r.turn_days * 864e5;
     let k = Math.max(0, Math.floor((now - first) / step));
     const rows = [];
+    const last = r.valid_until ? /* @__PURE__ */ new Date(`${r.valid_until}T23:59:00Z`) : null;
     for (let i = 0; i < 8; i++, k++) {
       const start = new Date(first.getTime() + k * step);
+      if (last && start > last) break;
       rows.push(el(
         "tr",
         {},
-        el("td", { text: start.toLocaleString(LOCALE, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) }),
+        el("td", { text: start.toLocaleString(LOCALE, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) }),
         el("td", { text: names[k % names.length] })
       ));
     }
@@ -1119,7 +1167,7 @@
     const o = state.options;
     const form = {
       name: s.name,
-      enabled: s.enabled === "1",
+      enabled: String(s.enabled) === "1",
       ring_seconds: s.ring_seconds,
       backup_type: s.backup_type,
       backup_number: s.backup_number,
@@ -1348,6 +1396,7 @@
   }
   var refreshOptions = () => get("options").then((o) => {
     state.options = o;
+    state.clockOffset = o.now - Math.floor(Date.now() / 1e3);
   });
   $(() => {
     refreshOptions().then(() => {
