@@ -51,10 +51,41 @@ class WorkerOnCallCalendar extends WorkerBase
         }
     }
 
-    /** A request from the module page: publish now. */
+    /**
+     * A request from the module page: publish now, or place a test call. The
+     * page has validated it; it is checked again here, because anything that
+     * can publish to the queue reaches this.
+     */
     public function onCommand(BeanstalkClient $message): void
     {
-        $this->publish();
+        try {
+            $request = json_decode($message->getBody(), true, 4, JSON_THROW_ON_ERROR);
+            match (is_array($request) ? ($request['command'] ?? '') : '') {
+                OnCallCalendarConf::COMMAND_PUBLISH => $this->publish(),
+                OnCallCalendarConf::COMMAND_TEST_CALL => $this->testCall((int)($request['schedule'] ?? 0), (string)($request['extension'] ?? '')),
+                default => throw new \InvalidArgumentException('Unknown command'),
+            };
+        } catch (Throwable $e) {
+            SystemMessages::sysLogMsg(static::class, 'Command not done: ' . $e->getMessage(), LOG_WARNING);
+        }
+    }
+
+    /**
+     * Rings the extension and, once it answers, dials the schedule's number
+     * from it, as the core's own click-to-call does. The call then runs the
+     * schedule's real chain.
+     */
+    private function testCall(int $scheduleId, string $extension): void
+    {
+        $schedule = (new ScheduleRepository(Databases::openReadOnly(ModuleContext::moduleDbFile())))->schedule($scheduleId);
+        $extensions = array_column(Employees::directory(Databases::openReadOnly(ModuleContext::coreDbFile())), 'extension');
+        if ($schedule === null || !in_array($extension, $extensions, true)) {
+            throw new \InvalidArgumentException('Invalid test call request');
+        }
+        $result = Util::amiOriginate($extension, '', (string)$schedule['number']);
+        if (strcasecmp((string)($result['Response'] ?? ''), 'Success') !== 0) {
+            throw new \RuntimeException('Originate refused: ' . ($result['Message'] ?? 'no response'));
+        }
     }
 
     private function publish(): void

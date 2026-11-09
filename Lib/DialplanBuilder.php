@@ -96,6 +96,8 @@ final class DialplanBuilder
         $final = self::target((string)($s['final_number'] ?? '')) ?? 'voicemail';
         $outside = self::target((string)($s['outside_number'] ?? '')) ?? $final;
         $name = self::comment((string)($s['name'] ?? ''));
+        // After a greeting the call is in early media, so phones play no ringback of their own.
+        $ringback = self::greeting($s) !== [];
 
         $lines = [
             "exten => $n,1,NoOp(On-call schedule $id: $name)",
@@ -111,8 +113,9 @@ final class DialplanBuilder
             'same => n,AGI(' . self::LOOKUP_AGI . ",$id)",
             'same => n(fresh),GotoIf($["${OCC_START}" == "out"]?outside)',
             'same => n,GotoIf($["${OCC_START}" == "go" & "${OCC_GOTO}x" != "x"]?elsewhere)',
+            ...self::greeting($s),
             'same => n,GotoIf($["${OCC_START}" != "1" | "${OCC_DIAL}x" == "x"]?backup)',
-            ...self::ringWithoutForwarding('${OCC_DIAL}', $ring),
+            ...self::ringWithoutForwarding('${OCC_DIAL}', $ring, $ringback),
             'same => n,GotoIf($["${DIALSTATUS}" == "ANSWER"]?done)',
             'same => n(backup),NoOp(On-call schedule ' . $id . ': backup)',
             ...self::backup($s),
@@ -140,7 +143,8 @@ final class DialplanBuilder
 
         return match ($type) {
             'member' => [
-                ...self::ringWithoutForwarding("Local/$number@internal-users/n", self::seconds($s['backup_ring_seconds'] ?? 20)),
+                ...self::ringWithoutForwarding("Local/$number@internal-users/n", self::seconds($s['backup_ring_seconds'] ?? 20),
+                    self::greeting($s) !== []),
                 'same => n,GotoIf($["${DIALSTATUS}" == "ANSWER"]?done)',
             ],
             'queue' => ["same => n,Goto(internal,$number,1)"],
@@ -157,15 +161,35 @@ final class DialplanBuilder
      *
      * @return list<string>
      */
-    private static function ringWithoutForwarding(string $dial, int $seconds): array
+    private static function ringWithoutForwarding(string $dial, int $seconds, bool $ringback = false): array
     {
         return [
             'same => n,Set(__FW_DISABLE=1)',
             'same => n,Set(__FW_DISABLE_INTERNAL=1)',
-            "same => n,Dial($dial,$seconds)",
+            "same => n,Dial($dial,$seconds" . ($ringback ? ',r' : '') . ')',
             'same => n,Set(__FW_DISABLE=)',
             'same => n,Set(__FW_DISABLE_INTERNAL=)',
         ];
+    }
+
+    /**
+     * The greeting, played to the caller before anyone is rung, as early
+     * media: Progress() opens the audio path without answering the call, so
+     * the caller isn't charged and the route still sees an unanswered call.
+     * The caller resolves greeting_sound_id to greeting_path (a sound file
+     * path without extension); anything else is left out.
+     *
+     * @param array<string, mixed> $s
+     * @return list<string>
+     */
+    private static function greeting(array $s): array
+    {
+        $path = (string)($s['greeting_path'] ?? '');
+        if (preg_match('#^/[\w/.-]+$#', $path) !== 1) {
+            return [];
+        }
+
+        return ['same => n,Progress()', "same => n,Playback($path,noanswer)"];
     }
 
     /**

@@ -323,6 +323,24 @@ class ModuleOnCallCalendarController extends BaseController
         });
     }
 
+    /**
+     * POST testCall: id (schedule), extension. Rings the extension, then
+     * calls the schedule from it through its real chain.
+     */
+    public function testCallAction(): void
+    {
+        $this->write(function (ScheduleEditor $editor, array $data, PDO $module, PDO $core): array {
+            $schedule = (new ScheduleRepository($module))->schedule((int)($data['id'] ?? 0)) ?? throw new EditorException('occ_ErrNotFound');
+            $extension = (string)($data['extension'] ?? '');
+            if (!in_array($extension, array_column(Employees::directory($core), 'extension'), true)) {
+                throw new EditorException('occ_ErrNoExtension');
+            }
+            OnCallCalendarConf::requestTestCall((int)$schedule['id'], $extension);
+
+            return [];
+        });
+    }
+
     // ------------------------------------------------------------------ plan writes
 
     /** POST saveShiftType: id (schedule), shift (name, start, end, weekdays, id to change one). */

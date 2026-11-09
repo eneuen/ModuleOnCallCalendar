@@ -852,6 +852,7 @@ function renderSettings(body) {
       el('input', { type: 'number', min: 5, max: 300, value: form.backup_ring_seconds, oninput: (e) => { form.backup_ring_seconds = Number(e.target.value); } })) : null);
   renderBackup();
 
+  const testFrom = select([['', t('occ_TestCallFrom')], ...o.employees.map((e) => [e.extension, `${e.name} (${e.extension})`])], '', {});
   const linked = d.routes.filter((r) => r.linked_schedule_id === s.id);
   const free = d.routes.filter((r) => r.linked_schedule_id === null && r.extension !== s.number);
   const routeAdd = select([['', t('occ_LinkRoutePick')], ...free.map((r) => [r.id, routeLabel(r)])], '', {});
@@ -891,6 +892,12 @@ function renderSettings(body) {
       el('div', { class: 'occ-actions' },
         button(t('occ_Save'), () => post('updateSchedule', { id: s.id, ...form, backup_user_id: Number(form.backup_user_id) || 0 })
           .then(() => { flash(t('occ_Saved')); refreshOptions().then(refresh); }), 'primary'))),
+
+    el('h4', { class: 'ui dividing header', text: t('occ_TestCall') }),
+    el('p', { class: 'occ-hint', text: t('occ_TestCallHint') }),
+    el('div', { class: 'ui action input occ-link' }, testFrom,
+      button(t('occ_TestCallStart'), () => testFrom.value && post('testCall', { id: s.id, extension: testFrom.value })
+        .then(() => flash(sub(t('occ_TestCallStarted'), { ext: testFrom.value }))), 'basic', 'phone')),
 
     el('h4', { class: 'ui dividing header', text: t('occ_LinkedRoutes') }),
     el('p', { class: 'occ-hint', text: sub(t('occ_LinkedRoutesHint'), { n: d.needed_timeout }) }),

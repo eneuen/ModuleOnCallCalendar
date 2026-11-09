@@ -17,8 +17,10 @@ Added:
   - **Calendar** (FullCalendar Standard, month, week and list views) in the PBX's own time zone: planned shifts in each person's colour, overrides solid, gaps striped. Click a shift to cover, swap or redirect it; drag across empty time to add an override; drag or resize overrides to move them.
   - **Roster grid:** shift types as rows, weekdays as columns, one grid per week of the cycle; click a cell to choose who works it. Shift types can be added, edited, deleted and reordered.
   - **Rotation:** people in turn order, first handover, turn length, active-hours windows, an end date, and the next eight handovers.
-  - **Settings:** name, on/off, ring times, backup, final and outside-hours destinations, greeting, which rule wins, linked incoming routes (link, unlink, a warning for routes whose timeout is shorter than the chain), everything else that routes to the number, and deleting the schedule.
+  - **Settings:** name, on/off, ring times, backup, final and outside-hours destinations, greeting, a test call, which rule wins, linked incoming routes (link, unlink, a warning for routes whose timeout is shorter than the chain), everything else that routes to the number, and deleting the schedule.
   - **Activity:** the audit log, with the changed values.
+- **Greeting:** an optional sound file played to the caller before anyone is rung, as early media, so the call is not answered (or charged) until a person picks up; ringing is then played to the caller.
+- **Test call** under Settings: rings a chosen phone first and, once answered, calls the schedule through its real chain.
 - **Linking incoming routes** from the wizard or the settings: the route's destination becomes the schedule's number and its timeout is raised to fit the chain; unlinking puts both back, unless the route was changed by hand since. Deleting a schedule unlinks its routes first and is refused while anything else still routes to its number.
 - **Every change is audited** with who made it, and validated on the server whatever the page sends.
 - **English and Russian.**

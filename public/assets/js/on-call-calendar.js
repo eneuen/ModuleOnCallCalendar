@@ -1172,6 +1172,7 @@
       ) : null
     );
     renderBackup();
+    const testFrom = select([["", t("occ_TestCallFrom")], ...o.employees.map((e) => [e.extension, `${e.name} (${e.extension})`])], "", {});
     const linked = d.routes.filter((r) => r.linked_schedule_id === s.id);
     const free = d.routes.filter((r) => r.linked_schedule_id === null && r.extension !== s.number);
     const routeAdd = select([["", t("occ_LinkRoutePick")], ...free.map((r) => [r.id, routeLabel(r)])], "", {});
@@ -1256,6 +1257,14 @@
             refreshOptions().then(refresh);
           }), "primary")
         )
+      ),
+      el("h4", { class: "ui dividing header", text: t("occ_TestCall") }),
+      el("p", { class: "occ-hint", text: t("occ_TestCallHint") }),
+      el(
+        "div",
+        { class: "ui action input occ-link" },
+        testFrom,
+        button(t("occ_TestCallStart"), () => testFrom.value && post("testCall", { id: s.id, extension: testFrom.value }).then(() => flash(sub(t("occ_TestCallStarted"), { ext: testFrom.value }))), "basic", "phone")
       ),
       el("h4", { class: "ui dividing header", text: t("occ_LinkedRoutes") }),
       el("p", { class: "occ-hint", text: sub(t("occ_LinkedRoutesHint"), { n: d.needed_timeout }) }),

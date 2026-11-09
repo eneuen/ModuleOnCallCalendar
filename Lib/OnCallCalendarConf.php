@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 namespace Modules\ModuleOnCallCalendar\Lib;
 
+use MikoPBX\Common\Models\SoundFiles;
 use MikoPBX\Core\System\BeanstalkClient;
 use MikoPBX\Core\System\SystemMessages;
 use MikoPBX\Core\Workers\Cron\WorkerSafeScriptsCore;
@@ -27,6 +28,8 @@ class OnCallCalendarConf extends ConfigClass
 
     /** Requests from the module page to the worker (the web process has no AMI connection). */
     public const string COMMANDS_TUBE = 'ModuleOnCallCalendar-commands';
+    public const string COMMAND_PUBLISH = 'publish';
+    public const string COMMAND_TEST_CALL = 'test_call';
 
     /** Each schedule's number, in [internal]: reached by routes, rules, IVRs and colleagues. */
     public function extensionGenInternal(): string
@@ -60,10 +63,21 @@ class OnCallCalendarConf extends ConfigClass
     public static function requestPublish(): void
     {
         try {
-            (new BeanstalkClient(self::COMMANDS_TUBE))->publish('publish');
+            (new BeanstalkClient(self::COMMANDS_TUBE))->publish(json_encode(['command' => self::COMMAND_PUBLISH]));
         } catch (Throwable $e) {
             SystemMessages::sysLogMsg(static::class, 'Could not ask the worker to publish: ' . $e->getMessage(), LOG_WARNING);
         }
+    }
+
+    /**
+     * Asks the worker to place a test call: ring $extension, and when it
+     * answers, dial the schedule's number from it.
+     */
+    public static function requestTestCall(int $scheduleId, string $extension): void
+    {
+        (new BeanstalkClient(self::COMMANDS_TUBE))->publish(json_encode([
+            'command' => self::COMMAND_TEST_CALL, 'schedule' => $scheduleId, 'extension' => $extension,
+        ]));
     }
 
     /** Enabling a module doesn't reload the dialplan by itself. */
@@ -78,6 +92,14 @@ class OnCallCalendarConf extends ConfigClass
         WorkerModelsEvents::invokeAction(ReloadDialplanAction::class);
     }
 
+    /** A sound file as a Playback path (without extension), or '' when it is gone. */
+    private static function soundPath(int $soundFileId): string
+    {
+        $file = SoundFiles::findFirstById($soundFileId);
+
+        return $file === null || (string)$file->path === '' ? '' : SoundFiles::resolveAsteriskAudioPath((string)$file->path);
+    }
+
     /** @return list<array<string, mixed>> */
     private function schedules(): array
     {
@@ -86,6 +108,7 @@ class OnCallCalendarConf extends ConfigClass
             $directory = Employees::directory(Databases::openReadOnly(ModuleContext::coreDbFile()));
             foreach ($schedules as &$schedule) {
                 $schedule['backup_extension'] = $directory[(int)$schedule['backup_user_id']]['extension'] ?? '';
+                $schedule['greeting_path'] = $schedule['greeting_sound_id'] === null ? '' : self::soundPath((int)$schedule['greeting_sound_id']);
             }
 
             return $schedules;

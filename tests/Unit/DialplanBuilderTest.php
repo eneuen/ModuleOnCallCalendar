@@ -89,6 +89,28 @@ final class DialplanBuilderTest extends TestCase
         self::assertStringContainsString('Dial(${OCC_DIAL},600)', $plan);
     }
 
+    public function testGreetingPlaysAsEarlyMediaThenRingsWithRingback(): void
+    {
+        $plan = DialplanBuilder::internal([['greeting_path' => '/offload/asterisk/sounds/other/oncall', 'backup_type' => 'member',
+            'backup_extension' => '104'] + self::SCHEDULE]);
+
+        self::assertStringContainsString(
+            "same => n,Progress()\n\tsame => n,Playback(/offload/asterisk/sounds/other/oncall,noanswer)\n\tsame => n,GotoIf(\$[\"\${OCC_START}\" != \"1\"",
+            $plan
+        );
+        self::assertStringContainsString('Dial(${OCC_DIAL},20,r)', $plan);
+        self::assertStringContainsString('Dial(Local/104@internal-users/n,20,r)', $plan);
+    }
+
+    public function testWithoutGreetingNoEarlyMedia(): void
+    {
+        $plan = DialplanBuilder::internal([['greeting_path' => 'x,1)Hangup('] + self::SCHEDULE]);
+
+        self::assertStringNotContainsString('Playback', $plan);
+        self::assertStringNotContainsString('Progress', $plan);
+        self::assertStringContainsString('Dial(${OCC_DIAL},20)', $plan);
+    }
+
     public function testTransferEntriesForwardIntoInternal(): void
     {
         self::assertSame(
