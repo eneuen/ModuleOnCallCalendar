@@ -21,7 +21,9 @@
   },
   "scripts": {
     "test": "phpunit",
-    "lint": "find App Lib Models Setup Messages tests -name '*.php' -print0 | xargs -0 -n1 php -l"
+    "lint": "find App Lib Models Setup Messages agi-bin tests tools -name '*.php' -not -path 'tools/phpstan/vendor/*' -print0 | xargs -0 -n1 php -l",
+    "check-banned": "php tools/check-banned.php",
+    "analyse": "tools/phpstan/vendor/bin/phpstan analyse -c tools/phpstan/phpstan.neon --memory-limit=2G"
   },
   "config": {
     "sort-packages": true,

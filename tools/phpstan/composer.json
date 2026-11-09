@@ -1,0 +1,16 @@
+{
+    "name": "eneuen/module-on-call-calendar-phpstan",
+    "description": "Static analysis for On Call Calendar against the MikoPBX core it targets. Kept apart from the module's own composer.json because the core and its dependencies are large (about 240 MB).",
+    "license": "GPL-3.0-or-later",
+    "require-dev": {
+        "mikopbx/core": "2026.6.34",
+        "phalcon/ide-stubs": "5.9.*",
+        "phpstan/phpstan": "^2.1"
+    },
+    "config": {
+        "sort-packages": true,
+        "platform": {
+            "php": "8.4.0"
+        }
+    }
+}

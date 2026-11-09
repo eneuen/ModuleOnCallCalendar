@@ -1,0 +1,63 @@
+# On a version tag (1.0.0 or v1.0.0): runs every CI check on the tagged
+# commit, builds the install zip with build/package.sh, and attaches it and
+# its checksum to a draft GitHub release. Nothing is published: the draft
+# waits for a maintainer to review and publish it.
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]*', '[0-9]*']
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  package:
+    needs: checks
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write          # to create the draft release
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+      - name: Version from the tag
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: CHANGELOG has a section for this version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          grep -qF "## [$VERSION]" CHANGELOG.md || { echo "CHANGELOG.md has no '## [$VERSION]' section" >&2; exit 1; }
+      - name: Build the install zip
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: build/package.sh "$VERSION" "$GITHUB_SHA"
+      - name: Release notes from the CHANGELOG
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "Install **ModuleOnCallCalendar-$VERSION.zip** below on the MikoPBX Modules page (check it against the .sha256 file first). The \"Source code\" archives are for developers and can't be installed."
+            echo
+            # The version's section ends at the next top-level heading (another version, or "Development history").
+            awk -v v="## [$VERSION]" 'index($0, v) == 1 { on = 1; next } /^## / && on { exit } on' CHANGELOG.md
+            echo
+            echo "Full notes: [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/CHANGELOG.md)"
+          } > release-notes.md
+      - name: Draft release with the zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+            --title "On Call Calendar $VERSION" --notes-file release-notes.md \
+            "dist/ModuleOnCallCalendar-$VERSION.zip" "dist/ModuleOnCallCalendar-$VERSION.zip.sha256"

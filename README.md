@@ -47,11 +47,7 @@ Before disabling or deleting the module, unlink its routes and change anything e
 
 ## Development
 
-```bash
-composer install
-composer test        # unit tests
-composer lint        # PHP syntax check
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the setup, the checks, how calls are routed and how a release is made.
 
 ## Licence
 

@@ -58,9 +58,9 @@ final class ScheduleEditor
      */
     public function suggestNumber(): string
     {
-        $taken = array_flip(array_map('strval', $this->core->query('SELECT number FROM m_Extensions')->fetchAll(PDO::FETCH_COLUMN)));
-        for ($n = 2200; $n < 100000; $n++) {
-            if (!isset($taken[(string)$n])) {
+        $taken = array_map('strval', $this->core->query('SELECT number FROM m_Extensions')->fetchAll(PDO::FETCH_COLUMN));
+        foreach (range(2200, 99999) as $n) {
+            if (!in_array((string)$n, $taken, true)) {
                 return (string)$n;
             }
         }
@@ -401,7 +401,7 @@ final class ScheduleEditor
      * Sets which rule wins where a schedule's rosters and rotations overlap:
      * the first in the list. PUBLISH.
      *
-     * @param list<array{type: string, id: int}> $rules every roster and rotation of the schedule
+     * @param list<array<string, mixed>> $rules {type, id} for every roster and rotation of the schedule
      */
     public function orderRules(int $scheduleId, array $rules): void
     {

@@ -1,0 +1,31 @@
+# Static analysis of the module, with the MikoPBX core and Phalcon stubs it runs
+# against. From the module folder:
+#   composer install -d tools/phpstan --ignore-platform-req='ext-*'
+#   composer analyse
+parameters:
+    level: 5
+    paths:
+        - ../../App
+        - ../../Lib
+        - ../../Models
+        - ../../Setup
+        - ../../Messages
+        - ../../agi-bin
+    scanDirectories:
+        - vendor/phalcon/ide-stubs/src
+        - vendor/mikopbx/core/src
+    tmpDir: .cache
+    ignoreErrors:
+        # Phalcon model annotations (@Indexes, @Column) are not PHPDoc types.
+        -
+            identifier: phpDoc.parseError
+            path: ../../Models/*
+        # The worker and the AGI script bootstrap the core with require_once
+        # 'Globals.php', which the core's include path resolves at run time (as
+        # in the core's own workers and AGI scripts).
+        -
+            identifier: requireOnce.fileNotFound
+            path: ../../Lib/WorkerOnCallCalendar.php
+        -
+            identifier: requireOnce.fileNotFound
+            path: ../../agi-bin/on_call_calendar_lookup.php
