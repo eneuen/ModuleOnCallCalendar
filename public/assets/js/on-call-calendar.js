@@ -1178,7 +1178,8 @@
       backup_ring_seconds: s.backup_ring_seconds,
       final_number: s.final_number,
       outside_number: s.outside_number,
-      greeting_sound_id: s.greeting_sound_id || ""
+      greeting_sound_id: s.greeting_sound_id || "",
+      callerid_prefix: s.callerid_prefix || ""
     };
     const backupBox = el("div", { class: "fields" });
     const renderBackup = () => fill(
@@ -1300,6 +1301,14 @@
             form.greeting_sound_id = e.target.value;
           } }
         ), t("occ_GreetingHint")),
+        field(t("occ_CallerIdPrefix"), el("input", {
+          type: "text",
+          maxlength: 20,
+          value: form.callerid_prefix,
+          oninput: (e) => {
+            form.callerid_prefix = e.target.value;
+          }
+        }), t("occ_CallerIdPrefixHint")),
         can("updateSchedule") ? el(
           "div",
           { class: "occ-actions" },

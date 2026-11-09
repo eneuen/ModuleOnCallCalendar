@@ -131,7 +131,7 @@ final class ScheduleEditor
      * the name changed).
      *
      * @param array<string, mixed> $data name, ring_seconds, backup_type, backup_number, backup_user_id,
-     *     backup_ring_seconds, final_number, outside_number, greeting_sound_id, enabled
+     *     backup_ring_seconds, final_number, outside_number, greeting_sound_id, callerid_prefix, enabled
      */
     public function updateSchedule(int $id, array $data): void
     {
@@ -144,6 +144,10 @@ final class ScheduleEditor
             if (array_key_exists('enabled', $data)) {
                 $this->module->prepare('UPDATE ' . ScheduleRepository::SCHEDULES . ' SET enabled = ? WHERE id = ?')
                     ->execute([$data['enabled'] ? '1' : '0', $id]);
+            }
+            if (array_key_exists('callerid_prefix', $data)) {
+                $this->module->prepare('UPDATE ' . ScheduleRepository::SCHEDULES . ' SET callerid_prefix = ? WHERE id = ?')
+                    ->execute([self::callerIdPrefix($data['callerid_prefix']), $id]);
             }
             if (array_key_exists('greeting_sound_id', $data)) {
                 $sound = $data['greeting_sound_id'];
@@ -949,6 +953,17 @@ final class ScheduleEditor
         }
 
         return $name;
+    }
+
+    /** A caller-ID name prefix: letters, digits and spaces, up to 20; '' for none. */
+    private static function callerIdPrefix(mixed $prefix): string
+    {
+        $prefix = trim(preg_replace('/\s+/u', ' ', (string)$prefix) ?? '');
+        if (mb_strlen($prefix) > 20 || preg_match('/^[\p{L}\p{N} ]*$/u', $prefix) !== 1) {
+            throw new EditorException('occ_ErrPrefix');
+        }
+
+        return $prefix;
     }
 
     private static function note(mixed $note): string

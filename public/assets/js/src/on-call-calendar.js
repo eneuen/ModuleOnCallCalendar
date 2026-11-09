@@ -908,7 +908,7 @@ function renderSettings(body) {
   const form = {
     name: s.name, enabled: String(s.enabled) === '1', ring_seconds: s.ring_seconds, backup_type: s.backup_type, backup_number: s.backup_number,
     backup_user_id: s.backup_user_id || '', backup_ring_seconds: s.backup_ring_seconds, final_number: s.final_number,
-    outside_number: s.outside_number, greeting_sound_id: s.greeting_sound_id || '',
+    outside_number: s.outside_number, greeting_sound_id: s.greeting_sound_id || '', callerid_prefix: s.callerid_prefix || '',
   };
   const backupBox = el('div', { class: 'fields' });
   const renderBackup = () => fill(backupBox,
@@ -961,6 +961,8 @@ function renderSettings(body) {
           { onchange: (e) => { form.outside_number = e.target.value; } }), t('occ_OutsideHint'))),
       field(t('occ_Greeting'), select([['', t('occ_NoGreeting')], ...o.sounds.map((x) => [x.id, x.name])], form.greeting_sound_id,
         { onchange: (e) => { form.greeting_sound_id = e.target.value; } }), t('occ_GreetingHint')),
+      field(t('occ_CallerIdPrefix'), el('input', { type: 'text', maxlength: 20, value: form.callerid_prefix,
+        oninput: (e) => { form.callerid_prefix = e.target.value; } }), t('occ_CallerIdPrefixHint')),
       can('updateSchedule') ? el('div', { class: 'occ-actions' },
         button(t('occ_Save'), () => post('updateSchedule', { id: s.id, ...form, backup_user_id: Number(form.backup_user_id) || 0 })
           .then(() => { flash(t('occ_Saved')); refreshOptions().then(refresh); }), 'primary')) : el('p', { class: 'occ-hint', text: t('occ_ReadOnlyHint') })),

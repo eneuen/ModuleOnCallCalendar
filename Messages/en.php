@@ -246,4 +246,7 @@ return [
     'occ_WizardWho' => 'Who takes turns?',
     'occ_WizardWhoOncall' => 'The people in turn order. Their turns run from one handover to the next, in the evenings, at night and at weekends (changeable later).',
     'occ_ReadOnlyHint' => 'You can view this schedule. To change it, ask an administrator for the Edit duty or Edit settings right.',
+    'occ_CallerIdPrefix' => 'Caller Name Prefix',
+    'occ_CallerIdPrefixHint' => 'Shown before the caller\'s name on the phones this schedule rings, e.g. SERVICE, so whoever answers knows which line it is. Letters, digits and spaces.',
+    'occ_ErrPrefix' => 'The prefix can have up to 20 letters, digits and spaces.',
 ];

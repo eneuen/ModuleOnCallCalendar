@@ -194,6 +194,16 @@ final class ScheduleEditorTest extends TestCase
         self::assertSame(30, json_decode($audit['after_json'], true)['ring_seconds']);
     }
 
+    public function testCallerIdPrefix(): void
+    {
+        $id = $this->shiftSchedule();
+        $this->editor->updateSchedule($id, ['callerid_prefix' => '  Сервис  2 ']);
+        self::assertSame('Сервис 2', $this->repository()->schedule($id)['callerid_prefix']);
+
+        $this->expectRefusal('occ_ErrPrefix');
+        $this->editor->updateSchedule($id, ['callerid_prefix' => 'A:B']);
+    }
+
     public function testRingTimeLimits(): void
     {
         $id = $this->shiftSchedule();

@@ -19,6 +19,7 @@ Added:
   - **Rotation:** people in turn order, first handover, turn length, active-hours windows, an end date, and the next eight handovers.
   - **Settings:** name, on/off, ring times, backup, final and outside-hours destinations, greeting, a test call, which rule wins, linked incoming routes (link, unlink, a warning for routes whose timeout is shorter than the chain), everything else that routes to the number, and deleting the schedule.
   - **Activity:** the audit log, with the changed values.
+- **Caller name prefix:** an optional prefix (for example SERVICE) put before the caller's name on the phones a schedule rings, as MikoPBX queues do, so whoever answers knows which line it is.
 - **Greeting:** an optional sound file played to the caller before anyone is rung, as early media, so the call is not answered (or charged) until a person picks up; ringing is then played to the caller.
 - **Test call** under Settings: rings a chosen phone first and, once answered, calls the schedule through its real chain.
 - **Rights for access groups:** View, Edit duty and Edit settings, granted through MikoPBX's access control (MIKO's Access control management module) as the page's actions; the README lists which to tick. Every request is checked against the role's rights, change requests need a token that carries them, and the page shows only the controls a person may use.

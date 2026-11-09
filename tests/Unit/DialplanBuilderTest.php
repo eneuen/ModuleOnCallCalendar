@@ -120,6 +120,17 @@ final class DialplanBuilderTest extends TestCase
         self::assertStringContainsString('Dial(${OCC_DIAL},20)', $plan);
     }
 
+    public function testCallerIdPrefixForThePeopleRung(): void
+    {
+        $plan = DialplanBuilder::internal([['callerid_prefix' => 'Сервис 2, ok)'] + self::SCHEDULE]);
+
+        self::assertStringContainsString(
+            "GotoIf(\$[\"\${OCC_START}\" == \"go\" & \"\${OCC_GOTO}x\" != \"x\"]?elsewhere)\n\tsame => n,Set(CALLERID(name)=Сервис 2 ok:\${CALLERID(name)})",
+            $plan
+        );
+        self::assertStringNotContainsString('CALLERID(name)', DialplanBuilder::internal([self::SCHEDULE]));
+    }
+
     public function testTransferEntriesForwardIntoInternal(): void
     {
         self::assertSame(

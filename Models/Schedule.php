@@ -116,6 +116,15 @@ class Schedule extends ModulesModelsBase
     public $greeting_sound_id;
 
     /**
+     * Put before the caller's name on the phones this schedule rings (for
+     * example "SERVICE"), so whoever answers knows which line it is. Letters,
+     * digits and spaces; empty for none.
+     *
+     * @Column(type="string", nullable=true)
+     */
+    public $callerid_prefix = '';
+
+    /**
      * @Column(type="string", length=1, nullable=false, default="1")
      */
     public $enabled = '1';

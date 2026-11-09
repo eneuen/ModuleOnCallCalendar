@@ -119,6 +119,7 @@ final class DialplanBuilder
             'same => n,AGI(' . self::LOOKUP_AGI . ",$id)",
             'same => n(fresh),GotoIf($["${OCC_START}" == "out"]?outside)',
             'same => n,GotoIf($["${OCC_START}" == "go" & "${OCC_GOTO}x" != "x"]?elsewhere)',
+            ...self::callerIdPrefix($s),
             ...self::greeting($s),
             'same => n,GotoIf($["${OCC_START}" != "1" | "${OCC_DIAL}x" == "x"]?backup)',
             ...self::ringWithoutForwarding('OCC_DIAL', $ring, $ringback, 'duty'),
@@ -231,6 +232,21 @@ final class DialplanBuilder
         }
 
         return ['same => n,Progress()', "same => n,Playback($path,noanswer)"];
+    }
+
+    /**
+     * Puts the schedule's prefix before the caller's name for the people it
+     * rings, as the core's queues do ("SERVICE:John"). Only letters, digits
+     * and spaces reach the dialplan.
+     *
+     * @param array<string, mixed> $s
+     * @return list<string>
+     */
+    private static function callerIdPrefix(array $s): array
+    {
+        $prefix = trim((string)preg_replace('/[^\p{L}\p{N} ]/u', '', (string)($s['callerid_prefix'] ?? '')));
+
+        return $prefix === '' ? [] : ['same => n,Set(CALLERID(name)=' . $prefix . ':${CALLERID(name)})'];
     }
 
     /**

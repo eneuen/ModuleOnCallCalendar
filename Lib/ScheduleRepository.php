@@ -175,7 +175,7 @@ final class ScheduleRepository
         $row['backup_user_id'] = $backupUser === null || $backupUser === '' ? null : (int)$backupUser;
         $greeting = $row['greeting_sound_id'] ?? null;
         $row['greeting_sound_id'] = $greeting === null || $greeting === '' ? null : (int)$greeting;
-        foreach (['backup_type', 'backup_number', 'outside_number', 'template'] as $key) {
+        foreach (['backup_type', 'backup_number', 'outside_number', 'template', 'callerid_prefix'] as $key) {
             $row[$key] = (string)($row[$key] ?? '');
         }
 
