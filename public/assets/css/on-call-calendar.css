@@ -1,0 +1,60 @@
+/* On Call Calendar page. Colours follow the admin cabinet's Fomantic UI theme. */
+
+.occ-hidden { display: none !important; }
+.occ-hint { color: #767676; font-size: .9em; margin-top: .25em; }
+.occ-label { color: #767676; font-size: .85em; text-transform: uppercase; letter-spacing: .03em; }
+.occ-center { text-align: center; }
+.occ-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5em; margin-bottom: 1em; }
+.occ-toolbar .occ-title { margin: 0 0 0 .5em; }
+.occ-clock { margin-left: auto; color: #767676; }
+.occ-actions { margin-top: 1.5em; display: flex; gap: .5em; }
+.occ-flash { position: fixed; right: 1.5em; bottom: 1.5em; z-index: 2000; }
+
+/* Home cards */
+.occ-cards.ui.cards > .card { width: calc(50% - 2em); }
+.occ-now { margin-top: .8em; padding: .6em .8em; border-radius: 4px; border-left: 4px solid; }
+.occ-now-on { background: #e6f6ec; border-color: #21ba45; }
+.occ-now-gap { background: #fff6e5; border-color: #f2711c; }
+.occ-now-off { background: #f5f7fa; border-color: #a0a0a0; }
+.occ-next { margin-top: .6em; }
+.occ-templates.ui.cards > .card { cursor: pointer; }
+.occ-templates.ui.cards > .card.occ-selected { box-shadow: 0 0 0 2px #2185d0; }
+
+/* People lists (rotation order, cell editor) */
+.occ-people-list { padding-left: 1.5em; margin: .5em 0; }
+.occ-people-list li { display: flex; align-items: center; justify-content: space-between; padding: .2em 0; }
+.occ-row-actions { white-space: nowrap; }
+.occ-row-actions .ui.button { margin: 0 0 0 .2em; }
+
+/* Roster grid */
+.occ-roster td { vertical-align: top; }
+.occ-shift-cell { background: #f9fafb; }
+.occ-shift-name { font-weight: bold; }
+.occ-cell { cursor: pointer; min-height: 3em; }
+.occ-cell:hover { background: #f1f8ff; }
+.occ-cell-empty { background: #fdecec; }
+.occ-cell-off { background: repeating-linear-gradient(45deg, #f5f7fa, #f5f7fa 6px, #eceff3 6px, #eceff3 12px); }
+.occ-chip.ui.label { display: block; margin: 0 0 .25em; background: #fff; border: 1px solid #ddd; }
+
+/* Calendar */
+.occ-calendar { margin-top: .5em; }
+.occ-legend { display: flex; align-items: center; gap: .4em; flex-wrap: wrap; color: #555; margin-bottom: .5em; }
+.occ-swatch { display: inline-block; width: 1.2em; height: .9em; border-radius: 2px; margin-left: .8em; }
+.occ-swatch-plan { background: #2185d033; border: 1px solid #2185d0; }
+.occ-swatch-override { background: #2185d0; }
+.occ-swatch-gap, .occ-calendar .occ-ev-gap {
+    background: repeating-linear-gradient(45deg, #f8cfcf, #f8cfcf 6px, #fdecec 6px, #fdecec 12px) !important;
+    opacity: 1 !important;
+}
+.occ-calendar .occ-ev-gap-label { font-size: .8em; box-shadow: none; }
+.occ-calendar .occ-ev-plan { border-left-width: 3px !important; }
+.occ-calendar .occ-ev-override { font-weight: bold; }
+.occ-calendar .fc .fc-toolbar-title { font-size: 1.3em; }
+.occ-preview { max-width: 30em; }
+.occ-window.ui.segment { padding: .6em .8em; }
+.occ-link { margin: .5em 0 1em; }
+.occ-audit td { vertical-align: top; }
+
+@media (max-width: 767px) {
+    .occ-cards.ui.cards > .card { width: 100%; }
+}

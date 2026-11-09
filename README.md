@@ -23,9 +23,23 @@ Calls rung by the module are ordinary MikoPBX calls: each leg appears in call hi
 
 Who is on duty is kept in Asterisk's database and read when a call arrives, so changing the plan never reloads the dialplan. If that information is out of date, the call goes to the backup and then the final destination rather than to someone who may no longer be on duty.
 
-## Linking an incoming route
+## Using it
 
-When an incoming route sends calls to a schedule's number, set the route's ring timeout longer than the whole chain (step 1 plus a person backup's ring time). MikoPBX stops the route's call at that timeout and moves on to its next rule.
+Open **Modules → On Call Calendar** (administrators only).
+
+1. **New schedule:** choose a template, a name and a number, and tick the incoming routes this schedule should answer. Shift duty starts with Morning and Afternoon shifts on weekdays; On-call starts with a rotation in the evenings, at night and at weekends.
+2. **Plan who is on duty:** fill the **Roster** grid (who works which shift on which weekday; several people in one cell ring together), or set up the **Rotation** (people take turns every few days). A roster can repeat over up to four weeks for alternating patterns.
+3. **Handle exceptions on the Calendar:** click a shift to have someone cover it, swap it with someone else's shift, or send its calls elsewhere; drag across empty time to add one. Changes take effect within seconds, without reloading anything.
+
+The home page shows who is on duty on every line right now, who is next, and where nobody is planned.
+
+## Incoming routes
+
+Linking a route from the module (in the wizard or under **Settings**) points it at the schedule's number and remembers what it pointed at before; **Unlink** puts it back. The module also raises the route's timeout so the whole chain fits: MikoPBX stops a route's call at that timeout and moves on to the route's next rule.
+
+Off-work time rules, IVR menu options and employees' forwarding can send calls to a schedule's number too; set those on their own pages. A typical on-call setup keeps the daytime route as it is and points an off-work time rule at the on-call schedule.
+
+Before disabling or deleting the module, unlink its routes and change anything else that points at a schedule's number: while the module is disabled, those calls fail.
 
 ## Requirements
 

@@ -1,0 +1,17 @@
+{
+  "name": "module-on-call-calendar-assets",
+  "private": true,
+  "description": "Builds the browser assets of the On Call Calendar MikoPBX module.",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "build": "node build/build.mjs"
+  },
+  "devDependencies": {
+    "@fullcalendar/core": "6.1.22",
+    "@fullcalendar/daygrid": "6.1.22",
+    "@fullcalendar/interaction": "6.1.22",
+    "@fullcalendar/list": "6.1.22",
+    "@fullcalendar/timegrid": "6.1.22",
+    "esbuild": "0.28.2"
+  }
+}
