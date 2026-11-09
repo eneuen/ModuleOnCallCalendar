@@ -25,6 +25,8 @@ const LOCALE = document.documentElement.lang || undefined;
 const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7];
 const TABS = ['calendar', 'roster', 'rotation', 'settings', 'activity'];
 const weekdayName = (d) => t(`occ_Weekday${d}`);
+/** Whether this person's access group may run a change action; the server checks it again. */
+const can = (action) => Boolean(state.options && state.options.can && state.options.can[action]);
 
 const state = {
   options: null,   // optionsAction
@@ -265,7 +267,7 @@ function route() {
     // Switching tabs of the open schedule redraws from what is loaded; changes reload it.
     if (same) renderSchedule();
     else openSchedule();
-  } else if (view === 'new') {
+  } else if (view === 'new' && can('createSchedule')) {
     showWizard();
   } else {
     showHome();
@@ -287,13 +289,13 @@ function showHome() {
     const cards = data.schedules.map(scheduleCard);
     fill(root,
       el('div', { class: 'occ-toolbar' },
-        button(t('occ_NewSchedule'), () => go('#/new'), 'primary', 'plus'),
+        can('createSchedule') ? button(t('occ_NewSchedule'), () => go('#/new'), 'primary', 'plus') : el('span'),
         el('span', { class: 'occ-clock', text: sub(t('occ_PbxClock'), { time: when(data.now, true), zone: data.timezone }) })),
       cards.length ? el('div', { class: 'ui stackable two cards occ-cards' }, cards)
         : el('div', { class: 'ui placeholder segment' },
           el('div', { class: 'ui icon header' }, el('i', { class: 'calendar alternate outline icon' }), t('occ_NoSchedules')),
           el('p', { class: 'occ-center', text: t('occ_NoSchedulesHint') }),
-          el('div', { class: 'occ-center' }, button(t('occ_NewSchedule'), () => go('#/new'), 'primary', 'plus'))));
+          can('createSchedule') ? el('div', { class: 'occ-center' }, button(t('occ_NewSchedule'), () => go('#/new'), 'primary', 'plus')) : null));
   });
 }
 
@@ -341,10 +343,10 @@ function scheduleCard({ schedule, members, status, references }) {
         sub(t('occ_NextAt'), { time: when(status.next.from, true), who: decisionText(status.next, schedule, members) })) : null),
     el('div', { class: 'extra content' }, coverage, wiring,
       el('span', { class: 'right floated' },
-        button(t('occ_CoverNow'), () => {
+        can('addOverride') ? button(t('occ_CoverNow'), () => {
           state.pendingCover = { scheduleId: schedule.id, to: now.to };
           go(`#/schedule/${schedule.id}/calendar`);
-        }, 'mini basic'))));
+        }, 'mini basic') : null)));
 }
 
 /* ------------------------------------------------------------------ wizard */
@@ -525,7 +527,7 @@ const refresh = () => loadDetail().then(renderSchedule);
 function renderCalendar(body) {
   const holder = el('div', { class: 'occ-calendar' });
   fill(body,
-    el('p', { class: 'occ-hint', text: t('occ_CalendarHint') }),
+    el('p', { class: 'occ-hint', text: can('addOverride') ? t('occ_CalendarHint') : t('occ_ReadOnlyHint') }),
     el('div', { class: 'occ-legend' },
       el('span', { class: 'occ-swatch occ-swatch-plan' }), t('occ_LegendPlan'),
       el('span', { class: 'occ-swatch occ-swatch-override' }), t('occ_LegendOverride'),
@@ -548,7 +550,7 @@ function renderCalendar(body) {
     scrollTime: '07:00:00',
     eventTimeFormat: { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' },
     slotLabelFormat: { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' },
-    selectable: true,
+    selectable: can('addOverride'),
     selectMirror: true,
     events: (info, success, failure) => {
       const from = info.startStr.slice(0, 10);
@@ -562,6 +564,7 @@ function renderCalendar(body) {
     },
     eventClick: (info) => {
       const p = info.event.extendedProps;
+      if (!can('addOverride') && !can('updateOverride')) return;
       if (p.override) overrideDialog(p.override);
       else if (p.segment) segmentDialog(p.segment);
     },
@@ -607,7 +610,7 @@ function calendarEvents(data, schedule, members) {
     const who = o.kind === 'elsewhere' ? sub(t('occ_SentTo'), { target: destinationName(o.destination) }) : memberNames(o.members, members).join(', ');
     events.push({
       id: `ovr-${o.id}`, start: toInput(o.start_at), end: toInput(o.end_at), title: `${t(`occ_Kind_${o.kind}`)}: ${who}${o.note ? ` · ${o.note}` : ''}`,
-      backgroundColor: colour, borderColor: colour, textColor: '#fff', editable: true, classNames: ['occ-ev-override'],
+      backgroundColor: colour, borderColor: colour, textColor: '#fff', editable: can('updateOverride'), classNames: ['occ-ev-override'],
       extendedProps: { override: o },
     });
   });
@@ -715,7 +718,7 @@ function renderRoster(body) {
   const addRoster = () => rosterDialog({ valid_from: state.options.today, valid_until: '', cycle_weeks: 1 });
 
   if (!roster) {
-    fill(body, el('p', { text: t('occ_NoRoster') }), button(t('occ_AddRoster'), addRoster, 'primary', 'plus'));
+    fill(body, el('p', { text: t('occ_NoRoster') }), can('saveRoster') ? button(t('occ_AddRoster'), addRoster, 'primary', 'plus') : null);
     return;
   }
   if (state.rosterWeek > roster.cycle_weeks) state.rosterWeek = 1;
@@ -727,17 +730,18 @@ function renderRoster(body) {
     el('td', { class: 'occ-shift-cell' },
       el('div', { class: 'occ-shift-name', text: shift.name }),
       el('div', { class: 'occ-hint', text: `${shift.start}–${shift.end}` }),
-      el('div', { class: 'occ-row-actions' },
+      can('saveShiftType') ? el('div', { class: 'occ-row-actions' },
         i > 0 ? button('', () => orderShift(i, -1), 'mini basic icon', 'arrow up') : null,
         i < shifts.length - 1 ? button('', () => orderShift(i, 1), 'mini basic icon', 'arrow down') : null,
         button('', () => shiftDialog(shift), 'mini basic icon', 'pencil'),
         button('', () => confirmDialog(sub(t('occ_DeleteShiftConfirm'), { name: shift.name }),
-          () => post('deleteShiftType', { id: schedule.id, shift_type_id: shift.id }).then(refresh)), 'mini basic icon', 'trash'))),
+          () => post('deleteShiftType', { id: schedule.id, shift_type_id: shift.id }).then(refresh)), 'mini basic icon', 'trash')) : null),
     WEEKDAYS.map((d) => {
       if (!shift.weekdays.includes(d)) return el('td', { class: 'occ-cell-off' });
       const users = usersIn(shift.id, d);
-      return el('td', { class: `occ-cell ${users.length ? '' : 'occ-cell-empty'}`, title: t('occ_EditCell'),
-        onclick: () => cellDialog(roster, shift, week, d, users) },
+      const editable = can('setCell');
+      return el('td', { class: `occ-cell ${editable ? 'occ-cell-editable' : ''} ${users.length ? '' : 'occ-cell-empty'}`,
+        title: editable ? t('occ_EditCell') : null, onclick: editable ? () => cellDialog(roster, shift, week, d, users) : null },
       users.length ? users.map((u) => el('div', { class: 'ui mini label occ-chip', style: `border-left: 4px solid ${colourOfUser(u)}`, text: employeeName(u) }))
         : el('span', { class: 'occ-hint', text: t('occ_EmptyCell') }));
     })));
@@ -749,9 +753,9 @@ function renderRoster(body) {
     }))) : null,
     el('div', { class: 'occ-toolbar' },
       el('span', { text: rosterLabel(roster) }),
-      button(t('occ_EditRoster'), () => rosterDialog(roster), 'mini basic', 'pencil'),
-      button(t('occ_AddShiftType'), () => shiftDialog({ name: '', start: '08:00', end: '17:00', weekdays: [1, 2, 3, 4, 5] }), 'mini basic', 'plus'),
-      button(t('occ_AddSeasonalRoster'), addRoster, 'mini basic', 'calendar plus')),
+      can('saveRoster') ? button(t('occ_EditRoster'), () => rosterDialog(roster), 'mini basic', 'pencil') : null,
+      can('saveShiftType') ? button(t('occ_AddShiftType'), () => shiftDialog({ name: '', start: '08:00', end: '17:00', weekdays: [1, 2, 3, 4, 5] }), 'mini basic', 'plus') : null,
+      can('saveRoster') ? button(t('occ_AddSeasonalRoster'), addRoster, 'mini basic', 'calendar plus') : null),
     roster.cycle_weeks > 1 ? el('div', { class: 'ui pointing secondary menu' }, Array.from({ length: roster.cycle_weeks }, (_, i) => el('a', {
       class: `item ${week === i + 1 ? 'active' : ''}`, onclick: () => { state.rosterWeek = i + 1; renderSchedule(); },
       text: sub(t('occ_WeekN'), { n: i + 1 }),
@@ -823,17 +827,17 @@ function renderRotation(body) {
     user_ids: [], first_handover: nextFriday(), turn_days: 7, active_hours: state.options.oncall_hours, valid_until: '',
   });
   if (!rotations.length) {
-    fill(body, el('p', { text: t('occ_NoRotation') }), button(t('occ_AddRotation'), add, 'primary', 'plus'));
+    fill(body, el('p', { text: t('occ_NoRotation') }), can('saveRotation') ? button(t('occ_AddRotation'), add, 'primary', 'plus') : null);
     return;
   }
   fill(body,
     rotations.map((r) => el('div', { class: 'ui segment' },
       el('div', { class: 'occ-toolbar' },
         el('strong', { text: memberNames(r.members, members).join(' → ') }),
-        button(t('occ_Edit'), () => rotationForm(body, { ...r, user_ids: r.members.map((m) => userOfMember(m, members)).filter(Boolean) }), 'mini basic', 'pencil')),
+        can('saveRotation') ? button(t('occ_Edit'), () => rotationForm(body, { ...r, user_ids: r.members.map((m) => userOfMember(m, members)).filter(Boolean) }), 'mini basic', 'pencil') : null),
       el('div', { class: 'occ-hint', text: sub(t('occ_RotationSummary'), { days: r.turn_days, at: r.first_handover }) }),
       preview(r))),
-    button(t('occ_AddRotation'), add, 'basic', 'plus'));
+    can('saveRotation') ? button(t('occ_AddRotation'), add, 'basic', 'plus') : null);
 }
 
 /** The next eight handovers of a rotation. */
@@ -957,24 +961,25 @@ function renderSettings(body) {
           { onchange: (e) => { form.outside_number = e.target.value; } }), t('occ_OutsideHint'))),
       field(t('occ_Greeting'), select([['', t('occ_NoGreeting')], ...o.sounds.map((x) => [x.id, x.name])], form.greeting_sound_id,
         { onchange: (e) => { form.greeting_sound_id = e.target.value; } }), t('occ_GreetingHint')),
-      el('div', { class: 'occ-actions' },
+      can('updateSchedule') ? el('div', { class: 'occ-actions' },
         button(t('occ_Save'), () => post('updateSchedule', { id: s.id, ...form, backup_user_id: Number(form.backup_user_id) || 0 })
-          .then(() => { flash(t('occ_Saved')); refreshOptions().then(refresh); }), 'primary'))),
+          .then(() => { flash(t('occ_Saved')); refreshOptions().then(refresh); }), 'primary')) : el('p', { class: 'occ-hint', text: t('occ_ReadOnlyHint') })),
 
-    el('h4', { class: 'ui dividing header', text: t('occ_TestCall') }),
-    el('p', { class: 'occ-hint', text: t('occ_TestCallHint') }),
-    el('div', { class: 'ui action input occ-link' }, testFrom,
-      button(t('occ_TestCallStart'), () => testFrom.value && post('testCall', { id: s.id, extension: testFrom.value })
-        .then(() => flash(sub(t('occ_TestCallStarted'), { ext: testFrom.value }))), 'basic', 'phone')),
+    can('testCall') ? el('div', {},
+      el('h4', { class: 'ui dividing header', text: t('occ_TestCall') }),
+      el('p', { class: 'occ-hint', text: t('occ_TestCallHint') }),
+      el('div', { class: 'ui action input occ-link' }, testFrom,
+        button(t('occ_TestCallStart'), () => testFrom.value && post('testCall', { id: s.id, extension: testFrom.value })
+          .then(() => flash(sub(t('occ_TestCallStarted'), { ext: testFrom.value }))), 'basic', 'phone'))) : null,
 
     el('h4', { class: 'ui dividing header', text: t('occ_LinkedRoutes') }),
     el('p', { class: 'occ-hint', text: sub(t('occ_LinkedRoutesHint'), { n: d.needed_timeout }) }),
     linked.length ? el('table', { class: 'ui compact table' }, el('tbody', {}, linked.map((r) => el('tr', {},
       el('td', { text: routeLabel(r) }),
       el('td', {}, r.changed_outside ? el('span', { class: 'ui orange label', text: t('occ_ChangedOutside') }) : null),
-      el('td', { class: 'right aligned' }, button(t('occ_Unlink'), () => post('unlinkRoute', { id: s.id, route_id: r.id })
+      el('td', { class: 'right aligned' }, can('unlinkRoute') && button(t('occ_Unlink'), () => post('unlinkRoute', { id: s.id, route_id: r.id })
         .then((res) => { flash(res.restored ? t('occ_Restored') : t('occ_ForgotLink')); refreshOptions().then(refresh); }), 'mini basic')))))) : el('p', { text: t('occ_NoLinkedRoutes') }),
-    el('div', { class: 'ui action input occ-link' }, routeAdd,
+    can('linkRoute') && el('div', { class: 'ui action input occ-link' }, routeAdd,
       button(t('occ_Link'), () => routeAdd.value && post('linkRoute', { id: s.id, route_id: Number(routeAdd.value) })
         .then(() => { flash(t('occ_Saved')); refreshOptions().then(refresh); }), 'basic')),
     shortTimeout.length ? el('div', { class: 'ui warning message', text: sub(t('occ_ShortTimeout'), { n: d.needed_timeout, routes: shortTimeout.map(routeLabel).join('; ') }) }) : null,
@@ -986,12 +991,12 @@ function renderSettings(body) {
       el('h4', { class: 'ui dividing header', text: t('occ_RuleOrder') }),
       el('p', { class: 'occ-hint', text: t('occ_RuleOrderHint') }),
       el('ol', { class: 'occ-people-list' }, rules.map((r, i) => el('li', {}, el('span', { text: r.label }),
-        el('span', { class: 'occ-row-actions' },
+        can('orderRules') ? el('span', { class: 'occ-row-actions' },
           i > 0 ? button('', () => moveRule(i, -1), 'mini basic icon', 'arrow up') : null,
-          i < rules.length - 1 ? button('', () => moveRule(i, 1), 'mini basic icon', 'arrow down') : null))))) : null,
+          i < rules.length - 1 ? button('', () => moveRule(i, 1), 'mini basic icon', 'arrow down') : null) : null)))) : null,
 
-    el('h4', { class: 'ui dividing header', text: t('occ_DangerZone') }),
-    button(t('occ_DeleteSchedule'), () => confirmDialog(sub(t('occ_DeleteScheduleConfirm'), { name: s.name, number: s.number }),
+    can('deleteSchedule') && el('h4', { class: 'ui dividing header', text: t('occ_DangerZone') }),
+    can('deleteSchedule') && button(t('occ_DeleteSchedule'), () => confirmDialog(sub(t('occ_DeleteScheduleConfirm'), { name: s.name, number: s.number }),
       () => post('deleteSchedule', { id: s.id }).then(() => { flash(t('occ_Deleted')); refreshOptions().then(() => go('#/')); })), 'basic red', 'trash'));
 }
 

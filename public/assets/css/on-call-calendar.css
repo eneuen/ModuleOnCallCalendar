@@ -30,8 +30,9 @@
 .occ-roster td { vertical-align: top; }
 .occ-shift-cell { background: #f9fafb; }
 .occ-shift-name { font-weight: bold; }
-.occ-cell { cursor: pointer; min-height: 3em; }
-.occ-cell:hover { background: #f1f8ff; }
+.occ-cell { min-height: 3em; }
+.occ-cell-editable { cursor: pointer; }
+.occ-cell-editable:hover { background: #f1f8ff; }
 .occ-cell-empty { background: #fdecec; }
 .occ-cell-off { background: repeating-linear-gradient(45deg, #f5f7fa, #f5f7fa 6px, #eceff3 6px, #eceff3 12px); }
 .occ-chip.ui.label { display: block; margin: 0 0 .25em; background: #fff; border: 1px solid #ddd; }

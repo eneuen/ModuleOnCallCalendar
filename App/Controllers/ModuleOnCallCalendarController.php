@@ -12,6 +12,7 @@ use InvalidArgumentException;
 use MikoPBX\AdminCabinet\Controllers\BaseController;
 use MikoPBX\AdminCabinet\Providers\AssetProvider;
 use MikoPBX\Common\Models\IncomingRoutingTable;
+use MikoPBX\Common\Providers\AclProvider;
 use MikoPBX\Common\Providers\JwtProvider;
 use MikoPBX\Core\System\SystemMessages;
 use MikoPBX\Core\Workers\Libs\WorkerModelsEvents\Actions\ReloadDialplanAction;
@@ -24,6 +25,7 @@ use Modules\ModuleOnCallCalendar\Lib\EditorException;
 use Modules\ModuleOnCallCalendar\Lib\Employees;
 use Modules\ModuleOnCallCalendar\Lib\ModuleContext;
 use Modules\ModuleOnCallCalendar\Lib\OnCallCalendarConf;
+use Modules\ModuleOnCallCalendar\Lib\Rights;
 use Modules\ModuleOnCallCalendar\Lib\RouteLinker;
 use Modules\ModuleOnCallCalendar\Lib\ScheduleEditor;
 use Modules\ModuleOnCallCalendar\Lib\ScheduleNumbers;
@@ -37,10 +39,12 @@ use Throwable;
 /**
  * Admin-cabinet page and JSON actions for On Call Calendar.
  *
- * Every request is checked for the admins role here, on top of the core's
- * SecurityPlugin: another module can grant other roles access to any
- * controller. The core's beforeExecuteRoute() returns void, so a refused
- * request is forwarded to deniedAction() rather than stopped.
+ * Every request is checked against MikoPBX's access list for this
+ * controller and action, as the core's SecurityPlugin does: administrators
+ * may do everything; other roles get what an access group grants them (see
+ * Lib/Rights for the actions behind View, Edit duty and Edit settings). The
+ * core's beforeExecuteRoute() returns void, so a refused request is
+ * forwarded to deniedAction() rather than stopped.
  *
  * Read actions are AJAX GETs. Write actions are AJAX POSTs with a JSON body
  * and a valid admin Bearer token, because the login cookie alone, as a
@@ -51,7 +55,6 @@ use Throwable;
  */
 class ModuleOnCallCalendarController extends BaseController
 {
-    private const string ADMIN_ROLE = 'admins';
     private const string DENIED_ACTION = 'denied';
 
     /** The longest range the calendar may ask for. */
@@ -64,7 +67,7 @@ class ModuleOnCallCalendarController extends BaseController
         if ($dispatcher->getActionName() === self::DENIED_ACTION) {
             return;
         }
-        if ($this->currentRole() !== self::ADMIN_ROLE) {
+        if (!$this->roleMay($this->currentRole(), $dispatcher->getActionName())) {
             $dispatcher->forward(['action' => self::DENIED_ACTION]);
         }
     }
@@ -209,6 +212,8 @@ class ModuleOnCallCalendarController extends BaseController
                 'suggested_number' => $editor->suggestNumber(),
                 'routes'           => $this->linker($this->moduleDb(), $core)->routes(),
                 'oncall_hours'     => Templates::ONCALL_ACTIVE_HOURS,
+                // The changes this person may make; the page shows only those controls.
+                'can'              => Rights::writable(fn (string $action): bool => $this->roleMay($this->currentRole(), $action)),
             ] + $this->clock($this->timezone(), time());
         });
     }
@@ -517,11 +522,11 @@ class ModuleOnCallCalendarController extends BaseController
      */
     private function write(callable $change, bool $reload = false): void
     {
-        // The token itself must be an admin's: the role check above also accepts the login cookie,
+        // The token itself must grant the action: the role check above also accepts the login cookie,
         // which a cross-site request would carry.
         $auth = (string)$this->request->getHeader('Authorization');
         $tokenRole = $this->di->getShared(JwtProvider::SERVICE_NAME)->extractRoleFromHeader($auth === '' ? null : $auth);
-        if (!$this->request->isPost() || !$this->request->isAjax() || $tokenRole !== self::ADMIN_ROLE) {
+        if (!$this->request->isPost() || !$this->request->isAjax() || !$this->roleMay($tokenRole, $this->dispatcher->getActionName())) {
             $this->send(403, ['success' => false, 'message' => $this->translation->_('occ_AccessDenied')]);
 
             return;
@@ -627,7 +632,21 @@ class ModuleOnCallCalendarController extends BaseController
         return $day->getTimestamp();
     }
 
-    /** The admin's login from the Bearer token, for the audit log. */
+    /** Whether a role may run one of this controller's actions, by MikoPBX's access list. */
+    private function roleMay(?string $role, string $action): bool
+    {
+        if ($role === null || $role === '') {
+            return false;
+        }
+        try {
+            return (bool)$this->di->getShared(AclProvider::SERVICE_NAME)->isAllowed($role, self::class, $action);
+        } catch (Throwable) {
+            // An unknown role or action: refused.
+            return false;
+        }
+    }
+
+    /** The user's login from the Bearer token, for the audit log. */
     private function currentLogin(): string
     {
         $header = (string)$this->request->getHeader('Authorization');

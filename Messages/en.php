@@ -8,7 +8,7 @@ return [
     'SubHeaderModuleOnCallCalendar' => 'Who answers each line, and when',
     'mo_ModuleModuleOnCallCalendar' => 'On Call Calendar',
     'occ_AccessDenied' => 'Access denied',
-    'occ_AccessDeniedHint' => 'On Call Calendar is available to administrators only.',
+    'occ_AccessDeniedHint' => 'Your access group has no rights in On Call Calendar. Ask an administrator.',
     'occ_ActiveHours' => 'Active Hours',
     'occ_ActiveHoursHint' => 'The person whose turn it is answers only inside these daily windows. A window that ends at or before its start runs into the next morning; 00:00 to 00:00 is the whole day.',
     'occ_AddPerson' => 'Add a person…',
@@ -245,4 +245,5 @@ return [
     'occ_WizardWhat' => 'What is this line for?',
     'occ_WizardWho' => 'Who takes turns?',
     'occ_WizardWhoOncall' => 'The people in turn order. Their turns run from one handover to the next, in the evenings, at night and at weekends (changeable later).',
+    'occ_ReadOnlyHint' => 'You can view this schedule. To change it, ask an administrator for the Edit duty or Edit settings right.',
 ];

@@ -81,9 +81,10 @@ The core creates the module's tables from the model annotations in `Models/`. It
 | `Lib/RouteLinker.php` | Linking and unlinking incoming routes, and what else routes to a number |
 | `Lib/ScheduleNumbers.php` | The schedules' numbers in the core's extensions table |
 | `Lib/ScheduleStatus.php` | The home page's now, next and coverage |
+| `Lib/Rights.php` | The page's actions grouped into View, Edit duty and Edit settings |
 | `Models/` | Tables in the module's database |
 | `Setup/PbxExtensionSetup.php` | Installer: sidebar entry, and on uninstall the AGI link and AstDB keys the core leaves behind |
-| `App/Controllers/`, `App/Views/` | The module page and its JSON actions. Reads are AJAX GETs; writes must be AJAX POSTs with a Bearer token |
+| `App/Controllers/`, `App/Views/` | The module page and its JSON actions, each checked against the role's rights. Reads are AJAX GETs; writes must be AJAX POSTs with a Bearer token that grants the action |
 | `public/assets/` | Page script and styles; `js/vendor/` holds the FullCalendar bundle and its licence |
 | `Messages/` | Interface text (English and Russian) |
 | `build/`, `package.json` | Builds the browser assets with esbuild, and the release zip (`build/package.sh`) |

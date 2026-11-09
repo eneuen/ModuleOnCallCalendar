@@ -25,7 +25,7 @@ Who is on duty is kept in Asterisk's database and read when a call arrives, so c
 
 ## Using it
 
-Open **Modules → On Call Calendar** (administrators only).
+Open **Modules → On Call Calendar** (administrators, and access groups given rights; see below).
 
 1. **New schedule:** choose a template, a name and a number, and tick the incoming routes this schedule should answer. Shift duty starts with Morning and Afternoon shifts on weekdays; On-call starts with a rotation in the evenings, at night and at weekends.
 2. **Plan who is on duty:** fill the **Roster** grid (who works which shift on which weekday; several people in one cell ring together), or set up the **Rotation** (people take turns every few days). A roster can repeat over up to four weeks for alternating patterns.
@@ -40,6 +40,18 @@ Linking a route from the module (in the wizard or under **Settings**) points it 
 Off-work time rules, IVR menu options and employees' forwarding can send calls to a schedule's number too; set those on their own pages. A typical on-call setup keeps the daytime route as it is and points an off-work time rule at the on-call schedule.
 
 Before disabling or deleting the module, unlink its routes and change anything else that points at a schedule's number: while the module is disabled, those calls fail.
+
+## Who can use it
+
+Administrators can do everything. Other people can be given access through an access group, with MIKO's **Access control management** module: in the group's rights, the module's page (`ModuleOnCallCalendar`) lists its actions by name. Tick the actions for the rights the group should have:
+
+| Right | For | Actions to tick |
+| --- | --- | --- |
+| **View** | Staff who go on duty: see who is on duty, the calendar, rosters and the activity log | `index`, `overview`, `schedule`, `calendar`, `options`, `audit` |
+| **Edit duty** | Office managers and team leads: plan who is on duty (with View) | `saveShiftType`, `deleteShiftType`, `orderShiftTypes`, `saveRoster`, `deleteRoster`, `setCell`, `saveRotation`, `deleteRotation`, `orderRules`, `addOverride`, `addSwap`, `updateOverride`, `deleteOverride`, `removeMember` |
+| **Edit settings** | Whoever may change where calls go (with View and Edit duty) | `createSchedule`, `updateSchedule`, `deleteSchedule`, `linkRoute`, `unlinkRoute`, `testCall` |
+
+Edit duty changes who answers, never where calls can go: people are always employees with an extension, and "send elsewhere" only offers the schedule's own destinations. The page shows each person only the controls their rights allow, and the module checks every request again.
 
 ## Requirements
 
