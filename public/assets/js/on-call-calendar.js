@@ -68,12 +68,13 @@
   function tag(colour, iconName, text, href) {
     return el(href ? "a" : "span", { class: `ui small basic ${colour} label`, href }, iconName ? icon(iconName) : null, text);
   }
-  function backButton() {
-    const node = button("", () => go("#/"), "basic icon", "left arrow");
-    node.setAttribute("aria-label", t("occ_AllSchedules"));
-    node.title = t("occ_AllSchedules");
+  function iconButton(label, onclick, iconName, cls = "mini basic") {
+    const node = button("", onclick, `${cls} icon`, iconName);
+    node.setAttribute("aria-label", label);
+    node.title = label;
     return node;
   }
+  var backButton = () => iconButton(t("occ_AllSchedules"), () => go("#/"), "left arrow", "basic");
   function sectionHead(title, ...actions) {
     return el(
       "div",
@@ -169,7 +170,7 @@
     );
     return showModal(modal);
   }
-  function confirmDialog(text, onYes, yesText = t("occ_Delete")) {
+  function confirmDialog(text, onYes, yesText) {
     const error = el("div", { class: "ui negative message occ-hidden" });
     const modal = el(
       "div",
@@ -265,6 +266,7 @@
     const hash = window.location.hash.replace(/^#\/?/, "");
     const [view, id, tab] = hash.split("/");
     clearError();
+    document.querySelectorAll(".occ-modal").forEach((m) => $(m).modal("hide"));
     if (state.calendar) {
       state.calendar.destroy();
       state.calendar = null;
@@ -566,14 +568,15 @@
           el("p", { class: "occ-note", text: t("occ_WizardCallsHint") }),
           routesBox,
           oncallBox,
-          el("h4", { class: "ui dividing header occ-step", text: t("occ_WizardNoAnswer") }),
+          el("h4", { class: "ui dividing header occ-step", text: t("occ_ChainTitle") }),
+          el("p", { class: "occ-note", text: t("occ_ChainHint") }),
           el(
             "div",
             { class: "fields" },
             el(
               "div",
-              { class: "four wide field" },
-              el("label", { text: t("occ_RingSeconds") }),
+              { class: "five wide field" },
+              el("label", { text: t("occ_RingOnDuty") }),
               el("input", { id: "occ-w-ring", type: "number", min: 5, max: 300, value: form.ring, oninput: (e) => {
                 form.ring = Number(e.target.value);
               } })
@@ -648,9 +651,9 @@
         el(
           "span",
           { class: "occ-icon-actions" },
-          i > 0 ? button("", () => move(i, -1), "mini basic icon", "arrow up") : null,
-          i < userIds.length - 1 ? button("", () => move(i, 1), "mini basic icon", "arrow down") : null,
-          button("", () => onChange(userIds.filter((x) => x !== id)), "mini basic icon", "times")
+          i > 0 ? iconButton(t("occ_MoveUp"), () => move(i, -1), "arrow up") : null,
+          i < userIds.length - 1 ? iconButton(t("occ_MoveDown"), () => move(i, 1), "arrow down") : null,
+          iconButton(t("occ_Remove"), () => onChange(userIds.filter((x) => x !== id)), "times")
         )
       ))) : null,
       el("div", { class: "field" }, add)
@@ -807,7 +810,7 @@
     });
     data.overrides.forEach((o) => {
       const colour = o.kind === "elsewhere" ? "var(--occ-muted)" : memberColour(o.members[0], members);
-      const who = o.kind === "elsewhere" ? sub(t("occ_SentTo"), { target: destinationName(o.destination) }) : memberNames(o.members, members).join(", ");
+      const who = o.kind === "elsewhere" ? destinationName(o.destination) : memberNames(o.members, members).join(", ");
       events.push({
         id: `ovr-${o.id}`,
         start: toInput(o.start_at),
@@ -916,7 +919,7 @@
       body,
       () => (existing ? post("updateOverride", { id: schedule.id, override_id: override.id, override: payload() }) : post("addOverride", { id: schedule.id, override: payload() })).then(done),
       t("occ_Save"),
-      existing ? [{ text: t("occ_Delete"), confirm: t("occ_DeleteOverrideConfirm"), action: () => post("deleteOverride", { id: schedule.id, override_id: override.id }).then(done) }] : []
+      existing ? [{ text: t("occ_DeleteOverride"), confirm: t("occ_DeleteOverrideConfirm"), action: () => post("deleteOverride", { id: schedule.id, override_id: override.id }).then(done) }] : []
     );
   }
   function swapDialog(rangeA, userA) {
@@ -981,13 +984,14 @@
         can("saveShiftType") ? el(
           "div",
           { class: "occ-icon-actions" },
-          i > 0 ? button("", () => orderShift(i, -1), "mini basic icon", "arrow up") : null,
-          i < shifts.length - 1 ? button("", () => orderShift(i, 1), "mini basic icon", "arrow down") : null,
-          button("", () => shiftDialog(shift), "mini basic icon", "pencil"),
-          button("", () => confirmDialog(
+          i > 0 ? iconButton(t("occ_MoveUp"), () => orderShift(i, -1), "arrow up") : null,
+          i < shifts.length - 1 ? iconButton(t("occ_MoveDown"), () => orderShift(i, 1), "arrow down") : null,
+          iconButton(t("occ_EditShiftType"), () => shiftDialog(shift), "pencil"),
+          iconButton(t("occ_DeleteShift"), () => confirmDialog(
             sub(t("occ_DeleteShiftConfirm"), { name: shift.name }),
-            () => post("deleteShiftType", { id: schedule.id, shift_type_id: shift.id }).then(refresh)
-          ), "mini basic icon", "trash")
+            () => post("deleteShiftType", { id: schedule.id, shift_type_id: shift.id }).then(refresh),
+            t("occ_DeleteShift")
+          ), "trash")
         ) : null
       ),
       WEEKDAYS.map((d) => {
@@ -1110,7 +1114,7 @@
   function rosterDialog(roster) {
     const form = { ...roster };
     dialog(
-      roster.id ? t("occ_EditRoster") : t("occ_AddRoster"),
+      roster.id ? t("occ_RosterDates") : t("occ_AddRoster"),
       el(
         "div",
         {},
@@ -1137,7 +1141,7 @@
         return refresh();
       }),
       t("occ_Save"),
-      roster.id ? [{ text: t("occ_Delete"), confirm: t("occ_DeleteRosterConfirm"), action: () => post("deleteRoster", { id: state.scheduleId, roster_id: roster.id }).then(refresh) }] : []
+      roster.id ? [{ text: t("occ_DeleteRoster"), confirm: t("occ_DeleteRosterConfirm"), action: () => post("deleteRoster", { id: state.scheduleId, roster_id: roster.id }).then(refresh) }] : []
     );
   }
   function renderRotation(body) {
@@ -1233,10 +1237,10 @@
           field(t("occ_Ends"), el("input", { type: "time", value: w.end, oninput: (e) => {
             w.end = e.target.value;
           } })),
-          button("", () => {
+          iconButton(t("occ_Remove"), () => {
             form.active_hours.splice(i, 1);
             renderHours();
-          }, "mini basic icon", "trash")
+          }, "trash")
         )
       )) : el("p", { class: "occ-note", text: t("occ_AlwaysActive") }),
       el(
@@ -1285,9 +1289,10 @@
           refresh();
         }), "primary"),
         button(t("occ_Cancel"), () => renderSchedule(), "basic"),
-        form.id ? button(t("occ_Delete"), () => confirmDialog(
+        form.id ? button(t("occ_DeleteRotation"), () => confirmDialog(
           t("occ_DeleteRotationConfirm"),
-          () => post("deleteRotation", { id: state.scheduleId, rotation_id: form.id }).then(refresh)
+          () => post("deleteRotation", { id: state.scheduleId, rotation_id: form.id }).then(refresh),
+          t("occ_DeleteRotation")
         ), "basic red") : null
       )
     ));
@@ -1391,14 +1396,19 @@
             ),
             el("div", { class: "six wide field" }, el("label", { text: t("occ_Number") }), el("input", { type: "text", value: s.number, disabled: true }))
           ),
-          el("div", { class: "field" }, el(
+          el(
             "div",
-            { class: "ui toggle checkbox" },
-            el("input", { type: "checkbox", id: "occ-enabled", checked: form.enabled, onchange: (e) => {
-              form.enabled = e.target.checked;
-            } }),
-            el("label", { for: "occ-enabled", text: t("occ_EnabledLabel") })
-          ))
+            { class: "field" },
+            el(
+              "div",
+              { class: "ui toggle checkbox" },
+              el("input", { type: "checkbox", id: "occ-enabled", checked: form.enabled, onchange: (e) => {
+                form.enabled = e.target.checked;
+              } }),
+              el("label", { for: "occ-enabled", text: t("occ_EnabledLabel") })
+            ),
+            el("div", { class: "occ-note", text: sub(t("occ_EnabledHint"), { number: s.number }) })
+          )
         ),
         section(
           t("occ_ChainTitle"),
@@ -1511,8 +1521,8 @@
           can("orderRules") ? el(
             "span",
             { class: "occ-icon-actions" },
-            i > 0 ? button("", () => moveRule(i, -1), "mini basic icon", "arrow up") : null,
-            i < rules.length - 1 ? button("", () => moveRule(i, 1), "mini basic icon", "arrow down") : null
+            i > 0 ? iconButton(t("occ_MoveUp"), () => moveRule(i, -1), "arrow up") : null,
+            i < rules.length - 1 ? iconButton(t("occ_MoveDown"), () => moveRule(i, 1), "arrow down") : null
           ) : null
         )))
       ) : null,
@@ -1524,7 +1534,8 @@
           () => post("deleteSchedule", { id: s.id }).then(() => {
             flash(t("occ_Deleted"));
             refreshOptions().then(() => go("#/"));
-          })
+          }),
+          t("occ_DeleteSchedule")
         ), "basic red", "trash")
       ) : null
     );
@@ -1545,7 +1556,7 @@
         "div",
         { class: "six wide field" },
         select(
-          [["", t("occ_BackupSameAsSchedule")], ["none", t("occ_BackupNoneRule")], ["member", t("occ_BackupPerson")], ["queue", t("occ_BackupQueue")]],
+          [["", t("occ_BackupSameAsSchedule")], ["none", t("occ_BackupNone")], ["member", t("occ_BackupPerson")], ["queue", t("occ_BackupQueue")]],
           form.backup_type,
           { disabled: !editable, onchange: (e) => {
             form.backup_type = e.target.value;
@@ -1608,6 +1619,7 @@
     fill(body, reportBox, section(t("occ_ChangeLog"), null, logBox));
     renderReport(reportBox);
     get("audit", { id: state.scheduleId }).then((data) => {
+      const history = auditHistory(data.entries);
       fill(logBox, data.entries.length ? el(
         "table",
         { class: "ui very basic table occ-table occ-audit" },
@@ -1617,7 +1629,7 @@
           {},
           el("td", { text: when(e.at, true) }),
           el("td", { text: e.actor || "\u2014" }),
-          el("td", {}, el("div", { text: t(`occ_Audit_${e.action.replace(".", "_")}`) }), auditDetail(e))
+          el("td", {}, el("div", { text: t(`occ_Audit_${e.action.replace(".", "_")}`) }), auditDetail(e, history))
         )))
       ) : el("p", { class: "occ-empty", text: t("occ_NoActivity") }));
     }, () => fill(logBox));
@@ -1737,13 +1749,103 @@
     link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 1e3);
   }
-  function auditDetail(e) {
-    const before = e.before && typeof e.before === "object" && !Array.isArray(e.before) ? e.before : {};
-    const after = e.after && typeof e.after === "object" && !Array.isArray(e.after) ? e.after : {};
-    const keys = [.../* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])].filter((k) => !["id", "schedule_id", "created_at", "created_by"].includes(k) && JSON.stringify(before[k]) !== JSON.stringify(after[k]));
-    if (!keys.length) return null;
-    const show = (v) => v === void 0 || v === null || v === "" ? "\u2014" : typeof v === "object" ? JSON.stringify(v) : String(v);
-    return el("div", { class: "occ-note" }, keys.slice(0, 6).map((k) => el("div", { text: `${k}: ${show(before[k])} \u2192 ${show(after[k])}` })));
+  var idList = (v) => (Array.isArray(v) ? v : String(v != null ? v : "").split(",")).map(Number).filter(Boolean);
+  function windowsText(v) {
+    let list = v;
+    try {
+      if (typeof v === "string") list = JSON.parse(v || "[]");
+    } catch (err) {
+      return String(v);
+    }
+    if (!Array.isArray(list) || !list.length) return t("occ_PresetAlways");
+    return list.map((w) => `${idList(w.weekdays).map(weekdayName).join(" ")} ${w.start}\u2013${w.end}`).join("; ");
+  }
+  function auditFields(action, history) {
+    const rule = /^(roster|rotation|rule)\./.test(action);
+    const backupType = (v) => !v ? t(rule ? "occ_BackupSameAsSchedule" : "occ_BackupNone") : { none: t("occ_BackupNone"), member: t("occ_BackupPerson"), queue: t("occ_BackupQueue") }[v] || v;
+    const members = (v) => idList(v).map((id) => {
+      const m = state.detail.members.find((x) => x.id === id);
+      if (m) return m.name || t("occ_UnknownPerson");
+      return history.memberUsers[id] ? employeeName(history.memberUsers[id]) : t("occ_UnknownPerson");
+    }).join(", ");
+    const employees = (v) => idList(v).map(employeeName).join(", ");
+    return {
+      name: ["occ_Name"],
+      number: ["occ_Number"],
+      enabled: ["occ_Status", (v) => String(v) === "1" ? t("occ_EnabledLabel") : t("occ_Disabled")],
+      ring_seconds: ["occ_RingOnDuty"],
+      backup_type: ["occ_Backup", backupType],
+      backup_number: ["occ_Backup", destinationName],
+      backup_user_id: ["occ_Backup", (v) => v ? employeeName(Number(v)) : ""],
+      backup_ring_seconds: ["occ_RingSeconds"],
+      final_number: ["occ_Final", destinationName],
+      outside_number: ["occ_Outside", (v) => v ? destinationName(v) : t("occ_SameAsFinal")],
+      greeting_sound_id: ["occ_Greeting", (v) => v ? (state.options.sounds.find((x) => String(x.id) === String(v)) || {}).name || v : t("occ_NoGreeting")],
+      callerid_prefix: ["occ_CallerIdPrefix"],
+      start_time: ["occ_Starts"],
+      end_time: ["occ_Ends"],
+      weekdays: ["occ_Weekdays", (v) => idList(v).map(weekdayName).join(" ")],
+      valid_from: ["occ_ValidFrom"],
+      valid_until: ["occ_ValidUntil"],
+      cycle_weeks: ["occ_Cycle", (v) => plural("occ_CycleWeeks", Number(v))],
+      kind: ["occ_OverrideKind", (v) => t(`occ_Kind_${v}`)],
+      start_at: ["occ_From"],
+      end_at: ["occ_To"],
+      members: [action.startsWith("rotation.") ? "occ_RotationPeople" : "occ_WhoAnswers", members],
+      first_handover: ["occ_FirstHandover"],
+      turn_days: ["occ_TurnDays"],
+      active_hours: ["occ_ActiveHours", windowsText],
+      destination: ["occ_SendTo", destinationName],
+      note: ["occ_Note"],
+      user_ids: ["occ_WhoAnswers", employees],
+      user_id: ["occ_Person", (v) => employeeName(Number(v))],
+      extension: ["occ_Destination", destinationName],
+      timeout: ["occ_Timeout"]
+    };
+  }
+  function auditHistory(entries) {
+    const memberUsers = {};
+    const shiftNames = {};
+    entries.forEach((e) => [e.before, e.after].forEach((row) => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) return;
+      if (e.action === "member.delete" && row.id) memberUsers[row.id] = row.user_id;
+      if (e.action.startsWith("shift_type.") && row.id && row.name) shiftNames[row.id] = row.name;
+    }));
+    return { memberUsers, shiftNames };
+  }
+  function auditDetail(e, history) {
+    const plain = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : null;
+    const before = plain(e.before);
+    const after = plain(e.after);
+    if (!before && !after) return null;
+    const fields = auditFields(e.action, history);
+    const show = (key, v) => {
+      if (v === void 0) return "\u2014";
+      const text = fields[key][1] ? fields[key][1](v) : v;
+      return text === null || text === void 0 || text === "" ? "\u2014" : String(text);
+    };
+    const lines = [];
+    if (e.action === "roster.cell") {
+      const cell = after || before;
+      const shift = (state.detail.shift_types.find((s) => s.id === cell.shift_type_id) || {}).name || history.shiftNames[cell.shift_type_id] || "?";
+      lines.push(`${shift} \xB7 ${weekdayName(cell.weekday)}${cell.week > 1 ? ` \xB7 ${sub(t("occ_WeekN"), { n: cell.week })}` : ""}`);
+    }
+    if (e.action.startsWith("route.")) {
+      const id = (after || before).route_id;
+      const r = state.detail.routes.find((x) => x.id === id);
+      lines.push(r ? r.rulename || r.number || `#${id}` : `#${id}`);
+    }
+    Object.keys(fields).forEach((key) => {
+      const was = before ? before[key] : void 0;
+      const now = after ? after[key] : void 0;
+      if (was === void 0 && now === void 0) return;
+      if (before && after && JSON.stringify(was) === JSON.stringify(now)) return;
+      const label = t(fields[key][0]);
+      if (before && after) lines.push(`${label}: ${show(key, was)} \u2192 ${show(key, now)}`);
+      else if (key === "backup_type" && ["member", "queue"].includes(after ? now : was)) return;
+      else if (show(key, after ? now : was) !== "\u2014") lines.push(`${label}: ${show(key, after ? now : was)}`);
+    });
+    return lines.length ? el("div", { class: "occ-note" }, lines.slice(0, 8).map((text) => el("div", { text }))) : null;
   }
   var refreshOptions = () => get("options").then((o) => {
     state.options = o;

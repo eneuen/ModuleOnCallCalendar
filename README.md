@@ -43,7 +43,7 @@ The screenshots show a test PBX with simulated calls; the names and numbers are 
     </td>
     <td width="50%" valign="top">
       <a href="docs/screenshots/new-schedule.png"><img src="docs/screenshots/new-schedule.png" alt="The new schedule wizard: a template, a name and number, and the incoming routes to answer"></a>
-      <br><b>New schedule.</b> A template, a name and a number, and the incoming routes it should answer, in a few steps.
+      <br><b>New Schedule.</b> A template, a name and a number, and the incoming routes it should answer, in a few steps.
     </td>
   </tr>
 </table>
@@ -78,7 +78,7 @@ Who is on duty is kept in Asterisk's database and read when a call arrives, so c
 
 Open **Modules → On Call Calendar** (administrators, and access groups given rights; see below).
 
-1. **New schedule:** choose a template, a name and a number, and tick the incoming routes this schedule should answer. Shift duty starts with Morning and Afternoon shifts on weekdays; On-call starts with a rotation in the evenings, at night and at weekends.
+1. **New Schedule:** choose a template, a name and a number, and tick the incoming routes this schedule should answer. **Shift Duty** starts with Morning and Afternoon shifts on weekdays; **On-Call** starts with a rotation in the evenings, at night and at weekends.
 2. **Plan who is on duty:** fill the **Roster** grid (who works which shift on which weekday; several people in one cell ring together), or set up the **Rotation** (people take turns every few days). A roster can repeat over up to four weeks for alternating patterns.
 3. **Handle exceptions on the Calendar:** click a shift to have someone cover it, swap it with someone else's shift, or send its calls elsewhere; drag across empty time to add one. Changes take effect within seconds, without reloading anything.
 
@@ -86,7 +86,7 @@ The home page shows who is on duty on every line right now, who is next, and whe
 
 All times on the page are the PBX's own time, in the time zone set in MikoPBX's general settings, whatever the browser's time zone is.
 
-**Settings.** Each schedule's Settings tab sets its name and number, whether it answers calls, and the if-no-answer chain: how long the people on duty ring, the backup, the final destination, and where calls go outside covered hours. It can also play a greeting from Sound Files before anyone is rung (the caller isn't answered, so not charged, until someone picks up), and put a prefix such as `SERVICE:` before the caller's name on the phones it rings. A roster or rotation can have its own backup, for example a night rotation with no backup on a line whose daytime roster falls back to a queue. **Test call** rings a phone you choose and, once you answer, calls the schedule through its real chain.
+**Settings.** Each schedule's Settings tab sets its name and number, whether it's enabled (while it's disabled, calls to its number fail), and the if-no-answer chain: how long the people on duty ring, the backup, the final destination, and where calls go outside covered hours. It can also play a greeting from Sound Files before anyone is rung (the caller isn't answered, so not charged, until someone picks up), and put a prefix such as `SERVICE:` before the caller's name on the phones it rings. A roster or rotation can have its own backup, for example a night rotation with no backup on a line whose daytime roster falls back to a queue. **Test Call** rings a phone you choose and, once you answer, calls the schedule through its real chain.
 
 **Activity.** Each schedule's Activity tab has a report for any period of up to three months: how many calls arrived, how many were answered by the person on duty, by the backup or others, went to voicemail or were not answered, the median time to answer, and per person their hours on duty and the calls they answered. The calls can be exported as CSV. Below it is the change log: who changed what, and when.
 
@@ -111,10 +111,10 @@ Administrators can do everything. Other people can be given access through an ac
 | Right | For | Actions to tick |
 | --- | --- | --- |
 | **View** | Staff who go on duty: see who is on duty, the calendar, rosters, the activity report and the change log | `index`, `overview`, `schedule`, `calendar`, `options`, `report`, `audit` |
-| **Edit duty** | Office managers and team leads: plan who is on duty (with View) | `saveShiftType`, `deleteShiftType`, `orderShiftTypes`, `saveRoster`, `deleteRoster`, `setCell`, `saveRotation`, `deleteRotation`, `orderRules`, `addOverride`, `addSwap`, `updateOverride`, `deleteOverride`, `removeMember` |
-| **Edit settings** | Whoever may change where calls go (with View and Edit duty) | `createSchedule`, `updateSchedule`, `deleteSchedule`, `setRuleBackup`, `linkRoute`, `unlinkRoute`, `testCall` |
+| **Edit Duty** | Office managers and team leads: plan who is on duty (with View) | `saveShiftType`, `deleteShiftType`, `orderShiftTypes`, `saveRoster`, `deleteRoster`, `setCell`, `saveRotation`, `deleteRotation`, `orderRules`, `addOverride`, `addSwap`, `updateOverride`, `deleteOverride`, `removeMember` |
+| **Edit Settings** | Whoever may change where calls go (with View and Edit Duty) | `createSchedule`, `updateSchedule`, `deleteSchedule`, `setRuleBackup`, `linkRoute`, `unlinkRoute`, `testCall` |
 
-Edit duty changes who answers, never where calls can go: people are always employees with an extension, and "send elsewhere" only offers the schedule's own destinations. The page shows each person only the controls their rights allow, and the module checks every request again.
+Edit Duty changes who answers, never where calls can go: people are always employees with an extension, and **Send Calls Elsewhere** only offers the schedule's own destinations. The page shows each person only the controls their rights allow, and the module checks every request again.
 
 ## Development
 

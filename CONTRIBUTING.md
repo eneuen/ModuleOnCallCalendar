@@ -86,18 +86,32 @@ The core creates the module's tables from the model annotations in `Models/` on 
 | `Lib/ScheduleNumbers.php` | The schedules' numbers in the core's extensions table |
 | `Lib/CallLog.php`, `Lib/ActivityReport.php` | The call log (notes from the dialplan, read back from the call records once a call is over) and the activity report |
 | `Lib/ScheduleStatus.php` | The home page's now, next and coverage |
-| `Lib/Rights.php` | The page's actions grouped into View, Edit duty and Edit settings |
+| `Lib/Rights.php` | The page's actions grouped into View, Edit Duty and Edit Settings |
 | `Models/` | Tables in the module's database |
 | `Setup/PbxExtensionSetup.php` | Installer: sidebar entry; on uninstall the AGI links and AstDB keys the core leaves behind, and without kept settings the linked routes put back and the numbers released |
 | `App/Controllers/`, `App/Views/` | The module page and its JSON actions, each checked against the role's rights. Reads are AJAX GETs; writes must be AJAX POSTs with a Bearer token that grants the action |
 | `public/assets/` | Page script and styles; `js/vendor/` and `css/vendor/` hold the FullCalendar bundles, `js/vendor/` also its licence |
-| `Messages/` | Interface text (English and Russian). A text with a count can have a form per plural category, such as `occ_CycleWeeks_one`; the page picks it with the language's plural rules and falls back to the plain key |
+| `Messages/` | Interface text (English and Russian). A text with a count can have a form per plural category, such as `occ_CycleWeeks_one`; the page picks it with the language's plural rules and falls back to the plain key. See [Writing interface text](#writing-interface-text) |
 | `build/`, `package.json` | Builds the browser assets with esbuild, and the release zip (`build/package.sh`) |
 | `tests/Unit/` | PHPUnit tests that run without a PBX |
 | `tools/callsim/` | Real-call test harness and the module's probe scenarios |
 | `tools/check-banned.php` | Fails the build if shipped code uses a banned function |
 | `tools/phpstan/` | PHPStan setup against the MikoPBX core |
 | `.gitattributes` | Lists the development files that are left out of every release |
+
+## Writing interface text
+
+The page talks to office managers and team leads, not to telephony engineers. Before adding or changing a text, read it in place on the page, in both languages.
+
+- **Say what the person needs, in their words.** Name things as the page already names them (shift, roster, rotation, override, backup, final destination) and use one word for one thing. Leave out how the module works inside.
+- **Put the important words first,** and cut every word that doesn't change the meaning.
+- **Buttons say what happens:** a verb and its object, such as Add Shift or Delete Roster. A confirmation's red button is named after the action, never just OK or Yes. A button that opens a dialog ends in an ellipsis (Cover…).
+- **Errors don't blame anyone.** Say what can't be done and what to do instead: "Choose an end date on or after the start date." The server returns them translated, so they are in `Messages/` too.
+- **Confirmations say what happened** ("Schedule deleted."). Empty states say what would be there and how to add it.
+- **Icon-only buttons need a name.** Use `iconButton()`, which gives screen readers a label and the mouse a tooltip.
+- **Counts use plural forms** (see `Messages/` above), never "(s)".
+
+**Capitalization (English).** Title Case for page and section headings, dialog titles, tabs, buttons, menu and select options, field labels, legend entries and column headers. Capitalize every word except articles (a, an, the), coordinating conjunctions (and, but, or, nor, for, so, yet) and prepositions of four letters or fewer (as, at, by, for, from, in, into, of, on, per, to, via, with), unless the word is first or last or belongs to a verb such as Take Over. Capitalize both parts of a hyphenated word (On-Call). Values such as "2 weeks" or "20 s" stay as they are. Sentence case for everything that reads as a sentence or a status: hints, notes, messages, errors, confirmations, empty states, tooltips and status labels such as "Uncovered right now". Russian uses sentence case throughout.
 
 ## Packaging a release
 

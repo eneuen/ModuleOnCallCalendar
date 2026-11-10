@@ -99,7 +99,7 @@ class ModuleOnCallCalendarController extends BaseController
         if ($this->request->isAjax()) {
             $this->view->setVar('raw_response', json_encode([
                 'success' => false,
-                'message' => $this->translation->_('occ_AccessDenied'),
+                'message' => $this->translation->_('occ_AccessDeniedHint'),
             ]));
         }
     }
@@ -586,7 +586,7 @@ class ModuleOnCallCalendarController extends BaseController
         $auth = (string)$this->request->getHeader('Authorization');
         $tokenRole = $this->di->getShared(JwtProvider::SERVICE_NAME)->extractRoleFromHeader($auth === '' ? null : $auth);
         if (!$this->request->isPost() || !$this->request->isAjax() || !$this->roleMay($tokenRole, $this->dispatcher->getActionName())) {
-            $this->send(403, ['success' => false, 'message' => $this->translation->_('occ_AccessDenied')]);
+            $this->send(403, ['success' => false, 'message' => $this->translation->_('occ_ErrNoRight')]);
 
             return;
         }
