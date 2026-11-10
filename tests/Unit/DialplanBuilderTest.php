@@ -35,15 +35,36 @@ final class DialplanBuilderTest extends TestCase
             '/Set\(__FW_DISABLE=1\)\n\tsame => n,Set\(__FW_DISABLE_INTERNAL=1\)\n.*Set\(__FW_TIME_\$\{OCC_F\}=600\).*\n\tsame => n,Dial\(\$\{OCC_DIAL\},20\)\n\tsame => n,Set\(__FW_DISABLE=\)/s',
             $plan
         );
-        // Each on-duty person's own forward timer is shadowed for this call, then cleared.
+        // Each on-duty person's own forward timer is saved, shadowed for this call, then put back.
         self::assertStringContainsString('Set(OCC_F=${CUT(OCC_DIAL,&,${OCC_I})})', $plan);
-        self::assertStringContainsString('ExecIf($[${REGEX("^[0-9]+$" ${OCC_F})}]?Set(__FW_TIME_${OCC_F}=))', $plan);
+        self::assertStringContainsString('ExecIf($[${REGEX("^[0-9]+$" ${OCC_F})}]?Set(__OCC_FWT_${OCC_F}=x${FW_TIME_${OCC_F}}))', $plan);
+        self::assertStringContainsString('ExecIf($[${REGEX("^[0-9]+$" ${OCC_F})}]?Set(__FW_TIME_${OCC_F}=${OCC_FWT_${OCC_F}:1}))', $plan);
+        self::assertStringNotContainsString('GLOBAL(', $plan);
+        // The legs are marked, so a transfer by whoever answers gets forwarding back.
+        self::assertStringContainsString("Set(__OCC_FWOFF=1)\n", $plan);
+        self::assertStringContainsString("Set(__OCC_FWOFF=)\n", $plan);
         // A circle of schedules ends in voicemail; no ';' (a comment in extensions.conf) in the warning.
         self::assertStringContainsString('Set(__OCC_HOPS=$[0${OCC_HOPS} + 1])', $plan);
         self::assertStringContainsString('GotoIf($[${OCC_HOPS} > 5]?loop)', $plan);
         self::assertStringNotContainsString(';', $plan);
         self::assertStringContainsString('same => n(final),Goto(internal,voicemail,1)', $plan);
         self::assertStringContainsString('same => n(outside),Goto(internal,voicemail,1)', $plan);
+    }
+
+    public function testTransferredCallGetsForwardingBack(): void
+    {
+        $preDial = DialplanBuilder::internalUsersPreDial();
+        $when = '"${ISTRANSFER}x" != "x" & "${OCC_FWOFF}" == "1"';
+
+        self::assertStringStartsWith('same => n,', $preDial);
+        self::assertStringContainsString("ExecIf(\$[$when]?Set(__FW_DISABLE=))", $preDial);
+        self::assertStringContainsString("ExecIf(\$[$when]?Set(__FW_DISABLE_INTERNAL=))", $preDial);
+        // The target's own ring time comes back only if it was saved, i.e. it was rung in that step too.
+        self::assertStringContainsString(
+            "ExecIf(\$[$when & \"\${OCC_FWT_\${EXTEN}}x\" != \"x\"]?Set(__FW_TIME_\${EXTEN}=\${OCC_FWT_\${EXTEN}:1}))", $preDial);
+        // The marker goes last: every line before it still sees it.
+        self::assertStringEndsWith("ExecIf(\$[$when]?Set(__OCC_FWOFF=))\n\t", $preDial);
+        self::assertStringNotContainsString(';', $preDial);
     }
 
     public function testPersonBackupIsRungForItsOwnTime(): void

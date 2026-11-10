@@ -343,6 +343,17 @@ final class ScheduleEditorTest extends TestCase
             'user_b' => 111, 'start_b' => '2026-11-11 08:00', 'end_b' => '2026-11-11 13:00']);
     }
 
+    public function testHalfOfASwapCannotBeMovedOverTheOther(): void
+    {
+        $id = $this->shiftSchedule();
+        [$a] = $this->editor->addSwap($id, ['user_a' => 110, 'start_a' => '2026-11-11 08:00', 'end_a' => '2026-11-11 10:30',
+            'user_b' => 111, 'start_b' => '2026-11-11 13:00', 'end_b' => '2026-11-11 18:00']);
+        // Moving it elsewhere is fine.
+        $this->editor->updateOverride($id, $a, ['start_at' => '2026-11-11 09:00', 'end_at' => '2026-11-11 11:00']);
+        $this->expectRefusal('occ_ErrSwapOverlap');
+        $this->editor->updateOverride($id, $a, ['start_at' => '2026-11-11 12:00', 'end_at' => '2026-11-11 14:00']);
+    }
+
     public function testOverrideOfAPersonWhoLeftCanStillBeMoved(): void
     {
         $id = $this->shiftSchedule();

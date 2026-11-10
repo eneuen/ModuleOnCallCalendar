@@ -240,8 +240,14 @@ final class DialplanBuilder
      *   short. A channel variable shadows the global, so it is set to the
      *   core's own no-forwarding value (600) for each leg; this step's Dial
      *   timeout decides.
-     * All are inherited (__) so they reach the far side of the Local channel,
-     * and cleared afterwards so later steps behave normally.
+     * All are inherited (__) so they reach the far side of the Local channel.
+     * Afterwards the caller's channel gets them back: forwarding on, and each
+     * FW_TIME_<ext> its own value again. Asterisk can't remove a channel
+     * variable (an empty one still hides the global) and MikoPBX has no
+     * GLOBAL(), so each value is saved first as OCC_FWT_<ext>, with an "x" in
+     * front so that a saved empty value differs from none saved. OCC_FWOFF
+     * marks the legs, so a call that the person who answered transfers gets
+     * forwarding back (internalUsersPreDial).
      *
      * @return list<string>
      */
@@ -250,12 +256,36 @@ final class DialplanBuilder
         return [
             'same => n,Set(__FW_DISABLE=1)',
             'same => n,Set(__FW_DISABLE_INTERNAL=1)',
+            'same => n,Set(__OCC_FWOFF=1)',
+            ...self::eachExtension($dialVar, "{$label}save", 'Set(__OCC_FWT_${OCC_F}=x${FW_TIME_${OCC_F}})'),
             ...self::eachExtension($dialVar, "{$label}set", 'Set(__FW_TIME_${OCC_F}=600)'),
             "same => n,Dial(\${{$dialVar}},$seconds" . ($ringback ? ',r' : '') . ')',
             'same => n,Set(__FW_DISABLE=)',
             'same => n,Set(__FW_DISABLE_INTERNAL=)',
-            ...self::eachExtension($dialVar, "{$label}clear", 'Set(__FW_TIME_${OCC_F}=)'),
+            'same => n,Set(__OCC_FWOFF=)',
+            ...self::eachExtension($dialVar, "{$label}clear", 'Set(__FW_TIME_${OCC_F}=${OCC_FWT_${OCC_F}:1})'),
         ];
+    }
+
+    /**
+     * For [internal-users], before the core works out an employee's ring time
+     * and forwarding: a call the module rang (OCC_FWOFF) that the person who
+     * answered has transferred is an ordinary call again, so the transfer
+     * target's own forwarding and voicemail apply. Without this the legs'
+     * inherited "forwarding off" would follow the caller to the target. When
+     * the target was rung in that step too, its own ring time is put back
+     * from what was saved (see ringWithoutForwarding).
+     */
+    public static function internalUsersPreDial(): string
+    {
+        $when = '"${ISTRANSFER}x" != "x" & "${OCC_FWOFF}" == "1"';
+
+        return implode("\n\t", [
+            "same => n,ExecIf(\$[$when]?Set(__FW_DISABLE=))",
+            "same => n,ExecIf(\$[$when]?Set(__FW_DISABLE_INTERNAL=))",
+            "same => n,ExecIf(\$[$when & \"\${OCC_FWT_\${EXTEN}}x\" != \"x\"]?Set(__FW_TIME_\${EXTEN}=\${OCC_FWT_\${EXTEN}:1}))",
+            "same => n,ExecIf(\$[$when]?Set(__OCC_FWOFF=))",
+        ]) . "\n\t";
     }
 
     /**

@@ -429,6 +429,23 @@ def transfer_to_schedule(p, c):
     b2.answer(); pause(2); caller.hangup(); b2.closed(); pause(2)
 
 
+@scenario("301, on duty, answers and blind-transfers the caller to 303, who forwards to 304 after 5 s: 304 rings, "
+          "so turning forwarding off for the schedule's call doesn't carry over to the transfer.")
+def transfer_keeps_target_forwarding(p, c):
+    p.reset()
+    p.override("cover", "301")
+    p.wait_published("1", dial_of("301"))
+    with forwarding("303", "304", ringlength=5):
+        a, b1, b3, b4 = Line("305"), Line("301"), Line("303"), Line("304")
+        a.dial(PROBE_NUMBER)
+        c.that(rang(b1, 8), "301 rings")
+        b1.answer(); c.that(answered(a, 5), "the caller is connected to 301"); pause(2)
+        b1.transfer("303")
+        c.that(rang(b3, 8), "303 rings after the transfer")
+        c.that(rang(b4, 15), "304 rings: 303's own forwarding applies")
+        a.hangup(); pause(2)
+
+
 @scenario("The published answer has expired and names the wrong person: the live lookup rings 302 from the plan.")
 def expired_answer_live_lookup(p, c):
     p.reset()

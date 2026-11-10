@@ -373,7 +373,7 @@ class forwarding:
     outside number can only be a forwarding target when it is an employee's
     mobile number, so `mobile` sets the extension's own mobile first (the
     usual "forward to my mobile"). The PBX reloads its dialplan after a
-    change, so wait before calling.
+    change, so this waits until Asterisk has the new values before calling.
     """
 
     def __init__(self, extension, target, ringlength=8, mobile=None):
@@ -392,8 +392,20 @@ class forwarding:
         if self.mobile:
             change.update({"mobile_number": self.mobile, "mobile_dialstring": self.mobile})
         self.pbx.patch(f"/employees/{emp['id']}", change)
-        pause(8)
+        self._wait(f"FW_TIME_{self.extension}={self.ringlength}", f"FW_{self.extension}={self.target}")
         return self
+
+    def _wait(self, *expected, timeout=45):
+        """Waits until Asterisk's globals hold (or, with "!", no longer hold) these values."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            shown = docker("exec", PBX_CONTAINER, "asterisk", "-rx", "dialplan show globals", capture=True)
+            lines = {line.strip() for line in shown.splitlines()}
+            if all((e[1:] not in lines) if e.startswith("!") else (e in lines) for e in expected):
+                pause(1)
+                return
+            pause(1)
+        raise TimeoutError(f"forwarding of {self.extension} not in the dialplan after {timeout} s")
 
     def __exit__(self, *exc):
         emp = self._employee(self.pbx)
@@ -401,7 +413,7 @@ class forwarding:
         if self.mobile:
             change.update({"mobile_number": "", "mobile_dialstring": ""})
         self.pbx.patch(f"/employees/{emp['id']}", change)
-        pause(8)
+        self._wait(f"!FW_{self.extension}={self.target}")
         return False
 
 

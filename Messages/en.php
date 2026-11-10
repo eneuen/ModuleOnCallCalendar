@@ -180,7 +180,7 @@ return [
     'occ_RotationSummary' => 'Turns of %n% days, first handover %at%',
     'occ_RotationSummary_one' => 'Turns of %n% day, first handover %at%',
     'occ_RoutedFrom' => 'Reached from %n% places',
-    'occ_RoutedFrom_one' => 'Reached from 1 place',
+    'occ_RoutedFrom_one' => 'Reached from %n% place',
     'occ_RuleOrder' => 'When Plans Overlap',
     'occ_RuleOrderHint' => 'Where a roster and a rotation cover the same time, the one higher in this list decides.',
     'occ_SameAsFinal' => 'Same as the Final Destination',
@@ -300,4 +300,6 @@ return [
     'occ_Status' => 'Status',
     'occ_Destination' => 'Destination',
     'occ_Timeout' => 'Timeout (Seconds)',
+    'occ_ErrBackupPerson' => 'Choose a backup person, or set the backup to None.',
+    'occ_ErrSession' => 'Your session has ended. Sign in again, then repeat the change.',
 ];

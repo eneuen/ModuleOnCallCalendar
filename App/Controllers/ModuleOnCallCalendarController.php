@@ -585,6 +585,12 @@ class ModuleOnCallCalendarController extends BaseController
         // which a cross-site request would carry.
         $auth = (string)$this->request->getHeader('Authorization');
         $tokenRole = $this->di->getShared(JwtProvider::SERVICE_NAME)->extractRoleFromHeader($auth === '' ? null : $auth);
+        if ($tokenRole === null && $this->request->isAjax()) {
+            // No valid token: the session has ended. A 401 is what the cabinet answers by signing in again.
+            $this->send(401, ['success' => false, 'message' => $this->translation->_('occ_ErrSession')]);
+
+            return;
+        }
         if (!$this->request->isPost() || !$this->request->isAjax() || !$this->roleMay($tokenRole, $this->dispatcher->getActionName())) {
             $this->send(403, ['success' => false, 'message' => $this->translation->_('occ_ErrNoRight')]);
 

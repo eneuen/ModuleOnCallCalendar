@@ -398,4 +398,8 @@
     .occ-page .occ-timeline > li { grid-template-columns: minmax(0, 1fr) auto; }
     .occ-page .occ-timeline-when { grid-column: 1 / -1; }
     .occ-page .occ-steps > li { padding-left: 2.4rem; }
+    /* A picker with its button (test call, link a route) stacks: the names in it are wider than a phone. */
+    .occ-page .occ-inline-action.ui.action.input { flex-direction: column; align-items: stretch; width: 100%; }
+    .occ-page .occ-inline-action.ui.action.input > select { width: 100%; min-width: 0; border-radius: var(--occ-radius) !important; }
+    .occ-page .occ-inline-action.ui.action.input > .button { margin-top: var(--occ-space-2); border-radius: var(--occ-radius) !important; }
 }

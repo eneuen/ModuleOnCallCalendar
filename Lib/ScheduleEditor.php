@@ -210,6 +210,9 @@ final class ScheduleEditor
             }
         } elseif ($backupType === 'member') {
             $backupUser = (int)($data['backup_user_id'] ?? 0);
+            if ($backupUser === 0) {
+                throw new EditorException('occ_ErrBackupPerson');
+            }
             if (($changed('backup_type') || $changed('backup_user_id')) && $this->extensionOf($backupUser) === null) {
                 throw new EditorException('occ_ErrNoExtension');
             }
@@ -475,6 +478,9 @@ final class ScheduleEditor
             }
         } elseif ($type === 'member') {
             $user = (int)($data['backup_user_id'] ?? 0);
+            if ($user === 0) {
+                throw new EditorException('occ_ErrBackupPerson');
+            }
             if ($this->extensionOf($user) === null) {
                 throw new EditorException('occ_ErrNoExtension');
             }
@@ -605,6 +611,17 @@ final class ScheduleEditor
         // Moving or resizing keeps the people as they are, even someone whose extension is gone since.
         $keepMembers = array_key_exists('user_ids', $data) ? null : (string)$before['members'];
         $row = $this->overrideRow($schedule, ['kind' => $current['kind']] + $data + $current, $keepMembers);
+        if ((int)($before['swap_group'] ?? 0) > 0) {
+            // A half of a swap may not be moved over the other half: the newer would undo the older.
+            $other = $this->module->prepare('SELECT start_at, end_at FROM ' . ScheduleRepository::OVERRIDES . '
+                WHERE schedule_id = ? AND swap_group = ? AND id <> ?');
+            $other->execute([$scheduleId, (int)$before['swap_group'], $id]);
+            foreach ($other->fetchAll(PDO::FETCH_ASSOC) as $half) {
+                if ($row['start_at'] < $half['end_at'] && $half['start_at'] < $row['end_at']) {
+                    throw new EditorException('occ_ErrSwapOverlap');
+                }
+            }
+        }
         $this->transaction(function () use ($scheduleId, $id, $row, $before): void {
             $this->module->prepare('UPDATE ' . ScheduleRepository::OVERRIDES . ' SET start_at = ?, end_at = ?, members = ?,
                 destination = ?, note = ? WHERE id = ?')

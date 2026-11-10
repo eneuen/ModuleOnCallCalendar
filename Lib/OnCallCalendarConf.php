@@ -49,6 +49,12 @@ class OnCallCalendarConf extends ConfigClass
         return DialplanBuilder::internalTransfer($this->schedules());
     }
 
+    /** A call the module rang and the answering person transferred gets the target's own forwarding back. */
+    public function extensionGenInternalUsersPreDial(): string
+    {
+        return DialplanBuilder::internalUsersPreDial();
+    }
+
     /** The worker that keeps who is on duty published in AstDB. */
     public function getModuleWorkers(): array
     {

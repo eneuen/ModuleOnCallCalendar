@@ -18,7 +18,12 @@
 /* global globalRootUrl, globalTranslate, $, FullCalendar */
 
 const BASE = `${globalRootUrl}module-on-call-calendar/`;
-const t = (key) => (globalTranslate && globalTranslate[key]) || key;
+/*
+ * The cabinet's globalTranslate is a Proxy that returns the key itself for a
+ * missing key, so whether a text exists is asked with `in`, never by its value.
+ */
+const has = (key) => typeof globalTranslate === 'object' && globalTranslate !== null && key in globalTranslate;
+const t = (key) => (has(key) ? globalTranslate[key] : key);
 /** Fills %name% placeholders, as the server's translations do. */
 const sub = (text, values) => Object.entries(values).reduce((s, [k, v]) => s.split(`%${k}%`).join(String(v)), text);
 const LOCALE = document.documentElement.lang || undefined;
@@ -28,7 +33,7 @@ const LOCALE = document.documentElement.lang || undefined;
  */
 const plural = (key, n, values = {}) => {
   const form = `${key}_${new Intl.PluralRules(LOCALE).select(n)}`;
-  return sub(globalTranslate && globalTranslate[form] ? globalTranslate[form] : t(key), { n, ...values });
+  return sub(has(form) ? globalTranslate[form] : t(key), { n, ...values });
 };
 const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7];
 const TABS = ['calendar', 'roster', 'rotation', 'activity', 'settings'];
@@ -47,6 +52,13 @@ const state = {
   pendingCover: null, // "Cover now" from the home page: {scheduleId, to}, opened once that schedule's calendar is shown
   clockOffset: 0,     // PBX clock minus the browser's, in seconds
   notice: '',         // a warning to show once the next view has loaded
+  view: 0,            // counts route changes, so a late response can tell it is for a view that is gone
+};
+
+/** A callback that runs only while the view it was made in is still showing. */
+const forThisView = (fn) => {
+  const view = state.view;
+  return (...args) => (view === state.view ? fn(...args) : undefined);
 };
 
 /* ------------------------------------------------------------------ DOM helpers */
@@ -342,6 +354,7 @@ function memberPerson(memberId, members) {
 function route() {
   const hash = window.location.hash.replace(/^#\/?/, '');
   const [view, id, tab] = hash.split('/');
+  state.view += 1;
   clearError();
   // A dialog belongs to the view it was opened from (the browser's Back button can leave it).
   document.querySelectorAll('.occ-modal').forEach((m) => $(m).modal('hide'));
@@ -405,13 +418,27 @@ function decisionText(decision, schedule, members) {
     const rung = decision.member_ids.filter((id) => (members.find((m) => m.id === id) || {}).extension);
     return memberNames(rung, members).join(', ');
   }
-  if (decision.start === '2') {
-    const backup = schedule.backup_type === 'queue' ? destinationName(schedule.backup_number)
-      : schedule.backup_type === 'member' ? employeeName(schedule.backup_user_id) : destinationName(schedule.final_number);
-    return sub(t('occ_GapGoesTo'), { target: backup });
-  }
+  if (decision.start === '2') return sub(t('occ_GapGoesTo'), { target: backupTarget(decision.backup || '', schedule) });
   if (decision.start === 'go') return sub(t('occ_SentTo'), { target: destinationName(decision.destination) });
   return sub(t('occ_OutsideGoesTo'), { target: destinationName(schedule.outside_number || schedule.final_number) });
+}
+
+/**
+ * Where calls go when nobody planned can be rung: the roster's or rotation's
+ * own backup ("none", "queue|3000", "dial|20|Local/201@internal-users/n"),
+ * or with none of its own ('') the schedule's backup, or else the final destination.
+ */
+function backupTarget(spec, schedule) {
+  if (spec === 'none') return destinationName(schedule.final_number);
+  if (spec.startsWith('queue|')) return destinationName(spec.slice(6));
+  const dial = /^dial\|\d+\|Local\/(\d+)@/.exec(spec);
+  if (dial) {
+    const e = state.options.employees.find((x) => x.extension === dial[1]);
+    return e ? `${e.name} (${e.extension})` : dial[1];
+  }
+  if (schedule.backup_type === 'queue') return destinationName(schedule.backup_number);
+  if (schedule.backup_type === 'member') return employeeName(schedule.backup_user_id);
+  return destinationName(schedule.final_number);
 }
 
 /** A decision as people (avatars) when someone is rung, otherwise as a line of text. */
@@ -613,18 +640,26 @@ function peopleList(userIds, onChange) {
 function openSchedule() {
   const root = $id('occ-main');
   fill(root, loader());
-  loadDetail().then(() => {
+  loadDetail().then(forThisView(() => {
     renderSchedule();
     if (state.notice) {
       showError(state.notice);
       state.notice = '';
     }
-  }, () => fill(root, el('div', { class: 'occ-editor-head' }, backButton())));
+  }), forThisView(() => fill(root, el('div', { class: 'occ-editor-head' }, backButton()))));
 }
 
-const loadDetail = () => get('schedule', { id: state.scheduleId }).then((d) => { state.detail = d; });
+/** Loads the open schedule; a response for a schedule that is no longer open is dropped. */
+const loadDetail = () => {
+  const id = state.scheduleId;
+  return get('schedule', { id }).then((d) => { if (id === state.scheduleId) state.detail = d; });
+};
 
 function renderSchedule() {
+  if (state.calendar) {
+    state.calendar.destroy();
+    state.calendar = null;
+  }
   const { schedule } = state.detail;
   const body = el('div', { class: 'ui bottom attached segment occ-tab' });
   const tabLink = (tab) => el('a', { class: `item${state.tab === tab ? ' active' : ''}`, href: `#/schedule/${schedule.id}/${tab}` },
@@ -651,7 +686,10 @@ function fadeTabs(tabs) {
 }
 
 /** Reloads the schedule after a change and redraws the current tab. */
-const refresh = () => loadDetail().then(renderSchedule);
+const refresh = () => {
+  const redraw = forThisView(renderSchedule);
+  return loadDetail().then(() => redraw());
+};
 
 /* ------------------------------------------------------------------ calendar tab */
 
@@ -699,9 +737,8 @@ function renderCalendar(body) {
     },
     eventClick: (info) => {
       const p = info.event.extendedProps;
-      if (!can('addOverride') && !can('updateOverride')) return;
-      if (p.override) overrideDialog(p.override);
-      else if (p.segment) segmentDialog(p.segment);
+      if (p.override && (can('updateOverride') || can('deleteOverride'))) overrideDialog(p.override);
+      else if (p.segment && (can('addOverride') || can('addSwap'))) segmentDialog(p.segment);
     },
     eventDrop: (info) => moveOverride(info),
     eventResize: (info) => moveOverride(info),
@@ -776,9 +813,9 @@ function segmentDialog(s) {
     el('div', {},
       el('p', { text: decisionText(s, state.detail.schedule, members) }),
       el('div', { class: 'ui vertical fluid buttons' },
-        button(t('occ_CoverEllipsis'), () => { $(modal).modal('hide'); overrideDialog({ ...range, kind: 'cover' }); }, 'basic', 'user'),
-        userIds.length === 1 ? button(t('occ_SwapEllipsis'), () => { $(modal).modal('hide'); swapDialog(range, userIds[0]); }, 'basic', 'exchange') : null,
-        button(t('occ_ElsewhereEllipsis'), () => { $(modal).modal('hide'); overrideDialog({ ...range, kind: 'elsewhere' }); }, 'basic', 'share'))),
+        can('addOverride') ? button(t('occ_CoverEllipsis'), () => { $(modal).modal('hide'); overrideDialog({ ...range, kind: 'cover' }); }, 'basic', 'user') : null,
+        userIds.length === 1 && can('addSwap') ? button(t('occ_SwapEllipsis'), () => { $(modal).modal('hide'); swapDialog(range, userIds[0]); }, 'basic', 'exchange') : null,
+        can('addOverride') ? button(t('occ_ElsewhereEllipsis'), () => { $(modal).modal('hide'); overrideDialog({ ...range, kind: 'elsewhere' }); }, 'basic', 'share') : null)),
     null);
 }
 
@@ -816,11 +853,11 @@ function overrideDialog(override) {
   const payload = () => ({ kind: form.kind, start_at: form.start, end_at: form.end, user_ids: form.users, destination: form.destination, note: form.note });
   const done = calendarChanged;
   dialog(existing ? t(`occ_Kind_${form.kind}`) : t('occ_NewOverride'), body,
-    () => (existing
+    existing && !can('updateOverride') ? null : () => (existing
       ? post('updateOverride', { id: schedule.id, override_id: override.id, override: payload() })
       : post('addOverride', { id: schedule.id, override: payload() })).then(done),
     t('occ_Save'),
-    existing ? [{ text: t('occ_DeleteOverride'), confirm: t('occ_DeleteOverrideConfirm'), action: () => post('deleteOverride', { id: schedule.id, override_id: override.id }).then(done) }] : []);
+    existing && can('deleteOverride') ? [{ text: t('occ_DeleteOverride'), confirm: t('occ_DeleteOverrideConfirm'), action: () => post('deleteOverride', { id: schedule.id, override_id: override.id }).then(done) }] : []);
 }
 
 /** Swaps a planned stretch with another person's stretch. */
@@ -843,7 +880,8 @@ function swapDialog(rangeA, userA) {
 /** After an override change: reload the schedule (it may have new members), then the calendar's events. */
 function calendarChanged() {
   flash(t('occ_Saved'));
-  return loadDetail().then(() => { if (state.calendar) state.calendar.refetchEvents(); });
+  // Not returned: the change is saved, so its dialog closes even if this reload fails.
+  loadDetail().then(() => { if (state.calendar) state.calendar.refetchEvents(); });
 }
 
 /* ------------------------------------------------------------------ roster tab */
@@ -855,7 +893,7 @@ function renderRoster(body) {
     state.rosterWeek = 1;
   }
   const roster = rosters.find((r) => r.id === state.rosterId);
-  const addRoster = () => rosterDialog({ valid_from: state.options.today, valid_until: '', cycle_weeks: 1 });
+  const addRoster = () => rosterDialog({ valid_from: state.detail.today || state.options.today, valid_until: '', cycle_weeks: 1 });
 
   if (!roster) {
     fill(body, el('p', { text: t('occ_NoRoster') }), can('saveRoster') ? button(t('occ_AddRoster'), addRoster, 'primary', 'plus') : null);
@@ -871,11 +909,11 @@ function renderRoster(body) {
     el('th', { class: 'occ-shift', scope: 'row' },
       el('div', { class: 'occ-shift-name', text: shift.name }),
       el('div', { class: 'occ-shift-time' }, icon('clock outline'), `${shift.start}–${shift.end}`),
-      can('saveShiftType') ? el('div', { class: 'occ-icon-actions' },
-        i > 0 ? iconButton(t('occ_MoveUp'), () => orderShift(i, -1), 'arrow up') : null,
-        i < shifts.length - 1 ? iconButton(t('occ_MoveDown'), () => orderShift(i, 1), 'arrow down') : null,
-        iconButton(t('occ_EditShiftType'), () => shiftDialog(shift), 'pencil'),
-        iconButton(t('occ_DeleteShift'), () => confirmDialog(sub(t('occ_DeleteShiftConfirm'), { name: shift.name }),
+      can('saveShiftType') || can('orderShiftTypes') || can('deleteShiftType') ? el('div', { class: 'occ-icon-actions' },
+        i > 0 && can('orderShiftTypes') ? iconButton(t('occ_MoveUp'), () => orderShift(i, -1), 'arrow up') : null,
+        i < shifts.length - 1 && can('orderShiftTypes') ? iconButton(t('occ_MoveDown'), () => orderShift(i, 1), 'arrow down') : null,
+        can('saveShiftType') ? iconButton(t('occ_EditShiftType'), () => shiftDialog(shift), 'pencil') : null,
+        !can('deleteShiftType') ? null : iconButton(t('occ_DeleteShift'), () => confirmDialog(sub(t('occ_DeleteShiftConfirm'), { name: shift.name }),
           () => post('deleteShiftType', { id: schedule.id, shift_type_id: shift.id }).then(refresh), t('occ_DeleteShift')), 'trash')) : null),
     WEEKDAYS.map((d) => {
       if (!shift.weekdays.includes(d)) return el('td', { class: 'occ-cell occ-cell-off' });
@@ -959,7 +997,7 @@ function rosterDialog(roster) {
       { onchange: (e) => { form.cycle_weeks = Number(e.target.value); } }), t('occ_CycleHint'))),
   () => post('saveRoster', { id: state.scheduleId, roster: form }).then((r) => { state.rosterId = r.id; return refresh(); }),
   t('occ_Save'),
-  roster.id ? [{ text: t('occ_DeleteRoster'), confirm: t('occ_DeleteRosterConfirm'), action: () => post('deleteRoster', { id: state.scheduleId, roster_id: roster.id }).then(refresh) }] : []);
+  roster.id && can('deleteRoster') ? [{ text: t('occ_DeleteRoster'), confirm: t('occ_DeleteRosterConfirm'), action: () => post('deleteRoster', { id: state.scheduleId, roster_id: roster.id }).then(refresh) }] : []);
 }
 
 /* ------------------------------------------------------------------ rotation tab */
@@ -1040,7 +1078,7 @@ function rotationForm(body, rotation) {
     el('div', { class: 'occ-form-actions' },
       button(t('occ_Save'), () => post('saveRotation', { id: state.scheduleId, rotation: form }).then(() => { flash(t('occ_Saved')); refresh(); }), 'primary'),
       button(t('occ_Cancel'), () => renderSchedule(), 'basic'),
-      form.id ? button(t('occ_DeleteRotation'), () => confirmDialog(t('occ_DeleteRotationConfirm'),
+      form.id && can('deleteRotation') ? button(t('occ_DeleteRotation'), () => confirmDialog(t('occ_DeleteRotationConfirm'),
         () => post('deleteRotation', { id: state.scheduleId, rotation_id: form.id }).then(refresh), t('occ_DeleteRotation')), 'basic red') : null)));
   renderPeople();
   renderHours();
@@ -1200,38 +1238,44 @@ function renderActivity(body) {
 
 /** The activity report: how calls ended and who answered, for a date range (default: the last 30 days). */
 function renderReport(box) {
-  const today = state.options.today;
+  const today = state.detail.today || state.options.today;
   const shift = (iso, days) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
   const range = { from: shift(today, -29), to: today };
   const result = el('div');
-  const load = () => get('report', { id: state.scheduleId, from: range.from, to: shift(range.to, 1) }).then((data) => {
-    const r = data.report;
-    const share = (n) => (r.calls ? `${Math.round((100 * n) / r.calls)}%` : '');
-    const secs = (s) => (s === null || s === undefined ? '—' : sub(t('occ_Seconds'), { n: s }));
-    // KPI cards as the cabinet's other dashboards draw them: label, value, then a muted line.
-    const tile = (kind, value, label, note = '') => el('div', { class: 'occ-kpi' },
-      el('div', { class: 'occ-kpi-label' }, kind ? el('span', { class: `occ-dot occ-dot-${kind}`, 'aria-hidden': 'true' }) : null, label),
-      el('div', { class: `occ-kpi-value${value === '—' ? ' occ-empty-value' : ''}`, text: value }),
-      note ? el('div', { class: 'occ-kpi-sub', text: note }) : null);
-    // The person's colour in this schedule, when they are a member.
-    const colourOf = (p) => (state.detail.members.find((m) => p.extension && m.extension === p.extension) || {}).colour;
-    fill(result,
-      el('div', { class: 'occ-kpis' },
-        tile('', String(r.calls), t('occ_ReportCalls')),
-        ['on_duty', 'other', 'voicemail', 'unanswered'].map((k) => tile(k, String(r.outcomes[k] || 0), t(`occ_Outcome_${k}`), share(r.outcomes[k] || 0))),
-        tile('', secs(r.median_wait), t('occ_MedianWaitColumn'))),
-      r.people.length ? el('table', { class: 'ui very basic table occ-table' },
-        el('thead', {}, el('tr', {}, [t('occ_Person'), t('occ_HoursOnDuty'), t('occ_Answered'), t('occ_AnsweredOnDuty'), t('occ_MedianWaitColumn')]
-          .map((h, i) => el('th', { class: i ? 'occ-num' : null, text: h })))),
-        el('tbody', {}, r.people.map((p) => el('tr', {},
-          el('td', {}, person(p.name || t('occ_UnknownPerson'), colourOf(p), p.extension || '')),
-          el('td', { class: 'occ-num', text: p.hours.toLocaleString(LOCALE) }),
-          el('td', { class: 'occ-num', text: String(p.answered) }),
-          el('td', { class: 'occ-num', text: String(p.answered_on_duty) }),
-          el('td', { class: 'occ-num', text: secs(p.median_wait) })))))
-        : el('p', { class: 'occ-empty', text: t('occ_NoReportPeople') }),
-      data.calls.length ? el('div', { class: 'occ-actions' }, button(t('occ_ExportCsv'), () => downloadCsv(data.calls, range), 'mini basic', 'download')) : null);
-  });
+  let latest = 0;
+  const load = () => {
+    const asked = { ...range };
+    const mine = ++latest;
+    return get('report', { id: state.scheduleId, from: asked.from, to: shift(asked.to, 1) }).then((data) => {
+      if (mine !== latest) return;
+      const r = data.report;
+      const share = (n) => (r.calls ? `${Math.round((100 * n) / r.calls)}%` : '');
+      const secs = (s) => (s === null || s === undefined ? '—' : sub(t('occ_Seconds'), { n: s }));
+      // KPI cards as the cabinet's other dashboards draw them: label, value, then a muted line.
+      const tile = (kind, value, label, note = '') => el('div', { class: 'occ-kpi' },
+        el('div', { class: 'occ-kpi-label' }, kind ? el('span', { class: `occ-dot occ-dot-${kind}`, 'aria-hidden': 'true' }) : null, label),
+        el('div', { class: `occ-kpi-value${value === '—' ? ' occ-empty-value' : ''}`, text: value }),
+        note ? el('div', { class: 'occ-kpi-sub', text: note }) : null);
+      // The person's colour in this schedule, when they are a member.
+      const colourOf = (p) => (state.detail.members.find((m) => p.extension && m.extension === p.extension) || {}).colour;
+      fill(result,
+        el('div', { class: 'occ-kpis' },
+          tile('', String(r.calls), t('occ_ReportCalls')),
+          ['on_duty', 'other', 'voicemail', 'unanswered'].map((k) => tile(k, String(r.outcomes[k] || 0), t(`occ_Outcome_${k}`), share(r.outcomes[k] || 0))),
+          tile('', secs(r.median_wait), t('occ_MedianWaitColumn'))),
+        r.people.length ? el('table', { class: 'ui very basic table occ-table' },
+          el('thead', {}, el('tr', {}, [t('occ_Person'), t('occ_HoursOnDuty'), t('occ_Answered'), t('occ_AnsweredOnDuty'), t('occ_MedianWaitColumn')]
+            .map((h, i) => el('th', { class: i ? 'occ-num' : null, text: h })))),
+          el('tbody', {}, r.people.map((p) => el('tr', {},
+            el('td', {}, person(p.name || t('occ_UnknownPerson'), colourOf(p), p.extension || '')),
+            el('td', { class: 'occ-num', text: p.hours.toLocaleString(LOCALE) }),
+            el('td', { class: 'occ-num', text: String(p.answered) }),
+            el('td', { class: 'occ-num', text: String(p.answered_on_duty) }),
+            el('td', { class: 'occ-num', text: secs(p.median_wait) })))))
+          : el('p', { class: 'occ-empty', text: t('occ_NoReportPeople') }),
+        data.calls.length ? el('div', { class: 'occ-actions' }, button(t('occ_ExportCsv'), () => downloadCsv(data.calls, asked), 'mini basic', 'download')) : null);
+    }, () => { if (mine === latest) fill(result); });
+  };
   // A period preset and the dates, as on the cabinet's other report pages; any change reloads.
   const fromInputEl = el('input', { type: 'date', value: range.from, 'aria-label': t('occ_From'),
     onchange: (e) => { range.from = e.target.value; preset.value = 'custom'; load(); } });
@@ -1378,7 +1422,8 @@ function auditDetail(e, history) {
     if (was === undefined && now === undefined) return;
     if (before && after && JSON.stringify(was) === JSON.stringify(now)) return;
     const label = t(fields[key][0]);
-    if (before && after) lines.push(`${label}: ${show(key, was)} → ${show(key, now)}`);
+    // An empty value stored as null or '' reads the same: no line for it.
+    if (before && after) { if (show(key, was) !== show(key, now)) lines.push(`${label}: ${show(key, was)} → ${show(key, now)}`); }
     // Added or deleted: the queue or person names the backup, so its type would say it twice.
     else if (key === 'backup_type' && ['member', 'queue'].includes(after ? now : was)) return;
     else if (show(key, after ? now : was) !== '—') lines.push(`${label}: ${show(key, after ? now : was)}`);

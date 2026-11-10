@@ -94,7 +94,7 @@ All times on the page are the PBX's own time, in the time zone set in MikoPBX's 
 
 ## Incoming routes
 
-Linking a route from the module (in the wizard or under **Settings**) points it at the schedule's number and remembers what it pointed at before; **Unlink** puts it back. The module also raises the route's timeout so the whole chain fits: MikoPBX stops a route's call at that timeout and moves on to the route's next rule.
+Linking a route from the module (in the wizard or under **Settings**) points it at the schedule's number and remembers what it pointed at before; **Unlink** puts it back. The module also raises the route's timeout so the whole chain fits: MikoPBX stops a route's call at that timeout and moves on to the route's next rule. The timeout leaves 30 seconds to spare but doesn't count a greeting's length, so with a greeting longer than that, raise the route's timeout on its own page.
 
 Off-work time rules, IVR menu options and employees' forwarding can send calls to a schedule's number too; set those on their own pages. A typical on-call setup keeps the daytime route as it is and points an off-work time rule at the on-call schedule.
 
