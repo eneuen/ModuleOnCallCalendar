@@ -417,16 +417,22 @@ def answered_call_outlives_route_timeout(p, c):
     caller.hangup(); b2.closed(); pause(2)
 
 
-@scenario("301 answers a direct inbound call and blind-transfers it to the schedule; 302, on duty, rings.")
+@scenario("301 answers a direct inbound call and blind-transfers it to the schedule; 302, on duty, rings for the schedule's "
+          "15 s with its own forwarding (to 303 after 5 s) still off, then the backup 304 rings.")
 def transfer_to_schedule(p, c):
-    p.reset()
+    p.reset(ring_seconds=15, backup_type="member", backup_user_id=p.users["304"])
     p.override("cover", "302")
     p.wait_published("1", dial_of("302"))
-    caller, b1, b2 = Line("carrier"), Line("301"), Line("302")
-    caller.dial(DID_DIRECT); b1.ringing(); b1.answer(); caller.established(); pause(2)
-    b1.transfer(PROBE_NUMBER)
-    c.that(rang(b2, 10), "302 rings after the transfer")
-    b2.answer(); pause(2); caller.hangup(); b2.closed(); pause(2)
+    with forwarding("302", "303", ringlength=5):
+        caller, b1, b2, b3, b4 = Line("carrier"), Line("301"), Line("302"), Line("303"), Line("304")
+        caller.dial(DID_DIRECT); b1.ringing(); b1.answer(); caller.established(); pause(2)
+        b1.transfer(PROBE_NUMBER)
+        t0 = time.time()
+        c.that(rang(b2, 10), "302 rings after the transfer")
+        c.that(not rang(b3, 12), "303 (302's own forwarding) does not ring: the transfer didn't turn it back on")
+        c.that(rang(b4, 10), "304 (backup) rings")
+        c.that(time.time() - t0 >= 14, "302 rang the schedule's 15 s, not its own 5 s")
+        caller.hangup(); pause(2)
 
 
 @scenario("301, on duty, answers and blind-transfers the caller to 303, who forwards to 304 after 5 s: 304 rings, "

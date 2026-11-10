@@ -130,6 +130,41 @@ final class ScheduleEditorTest extends TestCase
         $this->editor->createSchedule(['name' => 'Support <L1>', 'number' => '2202', 'template' => 'blank']);
     }
 
+    public function testQuotesInNamesAreRefused(): void
+    {
+        $this->expectRefusal('occ_ErrName');
+        $this->editor->createSchedule(['name' => "Support's `line`", 'number' => '2202', 'template' => 'blank']);
+    }
+
+    public function testRotationWithTooManyActiveHoursWindowsIsRefused(): void
+    {
+        $id = $this->shiftSchedule();
+        $windows = array_fill(0, ScheduleEditor::MAX_WINDOWS + 1, ['weekdays' => [1], 'start' => '18:00', 'end' => '19:00']);
+        $this->expectRefusal('occ_ErrWindows');
+        $this->editor->saveRotation($id, ['user_ids' => [112], 'first_handover' => '2026-11-01 18:00', 'turn_days' => 7, 'active_hours' => $windows]);
+    }
+
+    public function testScheduleHoldsAtMostTwentyRostersAndRotations(): void
+    {
+        $id = $this->shiftSchedule();
+        $count = count($this->repository()->rosters($id)) + count($this->repository()->rotations($id));
+        for ($i = $count; $i < ScheduleEditor::MAX_RULES; $i++) {
+            $this->editor->saveRotation($id, ['user_ids' => [112], 'first_handover' => '2026-11-01 18:00', 'turn_days' => 7]);
+        }
+        $this->expectRefusal('occ_ErrLimit');
+        $this->editor->saveRotation($id, ['user_ids' => [112], 'first_handover' => '2026-11-01 18:00', 'turn_days' => 7]);
+    }
+
+    public function testScheduleHoldsAtMostTwentyShifts(): void
+    {
+        $id = $this->shiftSchedule();
+        for ($i = count($this->repository()->shiftTypes($id)); $i < ScheduleEditor::MAX_SHIFT_TYPES; $i++) {
+            $this->editor->saveShiftType($id, ['name' => "Shift $i", 'start' => '12:00', 'end' => '13:00', 'weekdays' => [3]]);
+        }
+        $this->expectRefusal('occ_ErrLimit');
+        $this->editor->saveShiftType($id, ['name' => 'One more', 'start' => '12:00', 'end' => '13:00', 'weekdays' => [3]]);
+    }
+
     public function testDestinationDeletedInTheCoreDoesNotBlockOtherChanges(): void
     {
         $id = $this->shiftSchedule();

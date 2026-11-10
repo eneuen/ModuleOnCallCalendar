@@ -98,6 +98,8 @@ Linking a route from the module (in the wizard or under **Settings**) points it 
 
 Off-work time rules, IVR menu options and employees' forwarding can send calls to a schedule's number too; set those on their own pages. A typical on-call setup keeps the daytime route as it is and points an off-work time rule at the on-call schedule.
 
+Don't set a phone's own call forwarding (on the handset) to a schedule's number it is rung for: each pass rings the people on duty again, until the module stops the call after five passes. Forwarding set in MikoPBX is turned off for these calls and is not affected.
+
 While the module is disabled, calls to a schedule's number fail. Before disabling it for more than a moment, unlink its routes and change anything else that points at a schedule's number.
 
 ## Disabling and uninstalling
@@ -114,7 +116,7 @@ Administrators can do everything. Other people can be given access through an ac
 | **Edit Duty** | Office managers and team leads: plan who is on duty (with View) | `saveShiftType`, `deleteShiftType`, `orderShiftTypes`, `saveRoster`, `deleteRoster`, `setCell`, `saveRotation`, `deleteRotation`, `orderRules`, `addOverride`, `addSwap`, `updateOverride`, `deleteOverride`, `removeMember` |
 | **Edit Settings** | Whoever may change where calls go (with View and Edit Duty) | `createSchedule`, `updateSchedule`, `deleteSchedule`, `setRuleBackup`, `linkRoute`, `unlinkRoute`, `testCall` |
 
-Edit Duty changes who answers, never where calls can go: people are always employees with an extension, and **Send Calls Elsewhere** only offers the schedule's own destinations. The page shows each person only the controls their rights allow, and the module checks every request again.
+Rights apply to every schedule on the PBX; they can't be limited to some schedules. Edit Duty changes who answers, never where calls can go: people are always employees with an extension, and **Send Calls Elsewhere** only offers the schedule's own destinations. Only Edit Settings sees the PBX's incoming routes and their numbers. The page shows each person only the controls their rights allow, and the module checks every request again.
 
 ## Development
 

@@ -139,6 +139,12 @@ class ModuleOnCallCalendarController extends BaseController
             $id = $this->queryInt('id');
             $schedule = $repository->schedule($id) ?? throw new EditorException('occ_ErrNotFound');
             $linker = $this->linker($module, $core);
+            $routes = $linker->routes();
+            if (!$this->roleMay($this->currentRole(), 'updateSchedule')) {
+                // Without Edit Settings, only the routes that send calls here, for the names in the change log.
+                $routes = array_values(array_filter($routes, static fn (array $r): bool => $r['linked_schedule_id'] === $id
+                    || $r['extension'] === (string)$schedule['number']));
+            }
 
             return [
                 'schedule'          => $schedule,
@@ -146,7 +152,7 @@ class ModuleOnCallCalendarController extends BaseController
                 'shift_types'       => $repository->shiftTypes($id),
                 'rosters'           => $repository->rosters($id),
                 'rotations'         => $repository->rotations($id),
-                'routes'            => $linker->routes(),
+                'routes'            => $routes,
                 'references'        => $linker->references((string)$schedule['number']),
                 'needed_timeout'    => $linker->neededTimeout($schedule),
                 'elsewhere_targets' => ScheduleEditor::scheduleDestinations($schedule),
@@ -194,10 +200,12 @@ class ModuleOnCallCalendarController extends BaseController
             $queues = $core->query('SELECT extension AS number, name FROM m_CallQueues ORDER BY name')->fetchAll(PDO::FETCH_ASSOC);
             $sounds = $core->query("SELECT id, name FROM m_SoundFiles WHERE category = 'custom' ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
             $destinations = [];
+            // Mobile and other outside numbers can't be a schedule's destination, so they aren't sent at all.
+            $external = array_flip($core->query("SELECT number FROM m_Extensions WHERE type = 'EXTERNAL'")->fetchAll(PDO::FETCH_COLUMN));
             $result = DropdownsAction::getForSelect('routing');
             foreach ($result->success ? $result->data : [] as $row) {
                 $value = (string)($row['value'] ?? '');
-                if ($value !== '') {
+                if ($value !== '' && !isset($external[$value])) {
                     $name = trim(html_entity_decode(strip_tags((string)($row['name'] ?? $value)), ENT_QUOTES));
                     // Employees appear with their extension and their mobile; the number tells them apart.
                     if (ctype_digit($value) && !str_contains($name, $value)) {
@@ -207,6 +215,7 @@ class ModuleOnCallCalendarController extends BaseController
                 }
             }
             $editor = new ScheduleEditor($this->moduleDb(), $core, '', time());
+            $settings = $this->roleMay($this->currentRole(), 'updateSchedule');
 
             return [
                 'employees'        => $employees,
@@ -214,7 +223,8 @@ class ModuleOnCallCalendarController extends BaseController
                 'sounds'           => $sounds,
                 'destinations'     => $destinations,
                 'suggested_number' => $editor->suggestNumber(),
-                'routes'           => $this->linker($this->moduleDb(), $core)->routes(),
+                // Every incoming route, for the wizard's list: only for those who may link them.
+                'routes'           => $settings ? $this->linker($this->moduleDb(), $core)->routes() : [],
                 'oncall_hours'     => Templates::ONCALL_ACTIVE_HOURS,
                 // The changes this person may make; the page shows only those controls.
                 'can'              => Rights::writable(fn (string $action): bool => $this->roleMay($this->currentRole(), $action)),

@@ -26,7 +26,7 @@ final class DialplanBuilderTest extends TestCase
         self::assertStringContainsString('Set(__pt1c_UNIQUEID=${UNDEFINED})', $plan);
         self::assertStringContainsString('Set(OCC_DIAL=${DB(OnCallCalendar/7/dial)})', $plan);
         self::assertStringContainsString(
-            "GotoIf(\$[\${EPOCH} < 0\${DB(OnCallCalendar/7/until)}]?fresh)\n\tsame => n,Set(OCC_START=2)\n\tsame => n,AGI(on_call_calendar_lookup.php,7)\n\tsame => n(fresh),",
+            "GotoIf(\$[\${EPOCH} < 0\${DB(OnCallCalendar/7/until)}]?fresh)\n\tsame => n,Set(OCC_START=2)\n\tsame => n,Set(OCC_DIAL=)\n\tsame => n,Set(OCC_GOTO=)\n\tsame => n,Set(OCC_BSPEC=)\n\tsame => n,AGI(on_call_calendar_lookup.php,7)\n\tsame => n(fresh),",
             $plan
         );
         self::assertStringContainsString('GotoIf($["${OCC_START}" == "go" & "${OCC_GOTO}x" != "x"]?elsewhere)', $plan);
@@ -54,7 +54,8 @@ final class DialplanBuilderTest extends TestCase
     public function testTransferredCallGetsForwardingBack(): void
     {
         $preDial = DialplanBuilder::internalUsersPreDial();
-        $when = '"${ISTRANSFER}x" != "x" & "${OCC_FWOFF}" == "1"';
+        $when = '"${ISTRANSFER}x" != "x" & "${OCC_FWOFF}" == "1"'
+            . ' & "${REGEX("^Local/${EXTEN}@internal-users-" ${CHANNEL})}" != "1"';
 
         self::assertStringStartsWith('same => n,', $preDial);
         self::assertStringContainsString("ExecIf(\$[$when]?Set(__FW_DISABLE=))", $preDial);
@@ -65,6 +66,9 @@ final class DialplanBuilderTest extends TestCase
         // The marker goes last: every line before it still sees it.
         self::assertStringEndsWith("ExecIf(\$[$when]?Set(__OCC_FWOFF=))\n\t", $preDial);
         self::assertStringNotContainsString(';', $preDial);
+        // A caller transferred to the schedule reaches its legs with ISTRANSFER set too; on the module's own
+        // leg for the extension (Local/<ext>@internal-users-...) forwarding stays off.
+        self::assertSame(4, substr_count($preDial, '${REGEX("^Local/${EXTEN}@internal-users-" ${CHANNEL})}" != "1"'));
     }
 
     public function testPersonBackupIsRungForItsOwnTime(): void

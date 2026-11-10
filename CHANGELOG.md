@@ -4,6 +4,19 @@ All notable changes to this module are listed here. Versions follow [Semantic Ve
 
 ## [Unreleased]
 
+Fixed:
+
+- **A caller transferred to a schedule's number** no longer gets the person on duty's own forwarding and voicemail: the backup gets its turn, as with any other call. Forwarding still comes back for a caller that the person who answered transfers on.
+- **A call whose published answer has expired** and whose live lookup fails now goes to the schedule's own backup, as described, instead of to the backup or people of the expired answer.
+
+Security:
+
+- **Size limits** on what a schedule can hold (20 shifts, 20 rosters and rotations, 21 active-hours windows per rotation, 500 overrides still to come), so a person with Edit Duty can't make working out who is on duty slow for every schedule.
+- **Less for View:** only Edit Settings receives the PBX's incoming routes and their numbers, and employees' mobile numbers are no longer sent to the page at all (they were never accepted as a destination).
+- **Plain error messages:** when the core fails to save a route, the page shows a plain message and the details go to the system log.
+- **More checks before a call:** the published people to ring are checked against the expected format before they reach the dialplan, and schedule names can't contain `'` or backticks.
+- **CSV export:** a value starting with `=`, `+`, `-` or `@` is kept as text, so a spreadsheet can't run it as a formula.
+
 ## [1.0.0] - 2026-11-10
 
 The first version of On Call Calendar: duty rosters, on-call rotations and if-no-answer routing for MikoPBX 2026.6.34 or later.

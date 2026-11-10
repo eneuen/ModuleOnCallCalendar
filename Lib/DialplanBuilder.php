@@ -152,6 +152,10 @@ final class DialplanBuilder
             // A stale or missing answer: ask the AGI fallback; if that fails it stays a gap.
             "same => n,GotoIf(\$[\${EPOCH} < 0\${DB($key/until)}]?fresh)",
             'same => n,Set(OCC_START=2)',
+            // Nothing from the expired answer is used: if the lookup fails, the call is a gap with the schedule's own backup.
+            'same => n,Set(OCC_DIAL=)',
+            'same => n,Set(OCC_GOTO=)',
+            'same => n,Set(OCC_BSPEC=)',
             'same => n,AGI(' . self::LOOKUP_AGI . ",$id)",
             // A note for the activity report; the worker reads the call's records once it is over (CallLog).
             'same => n(fresh),Set(DB(' . CallLog::FAMILY . "/$id/\${CHANNEL(linkedid)})=\${EPOCH}|\${OCC_START}|\${OCC_DIAL})",
@@ -275,10 +279,17 @@ final class DialplanBuilder
      * inherited "forwarding off" would follow the caller to the target. When
      * the target was rung in that step too, its own ring time is put back
      * from what was saved (see ringWithoutForwarding).
+     *
+     * A caller transferred to a schedule's number brings ISTRANSFER along to
+     * every leg the module rings, so ISTRANSFER alone can't tell the two
+     * apart. The module's own leg for an extension runs on a Local channel
+     * named after that extension (Local/<ext>@internal-users-...); a
+     * transfer target is always reached on some other channel.
      */
     public static function internalUsersPreDial(): string
     {
-        $when = '"${ISTRANSFER}x" != "x" & "${OCC_FWOFF}" == "1"';
+        $when = '"${ISTRANSFER}x" != "x" & "${OCC_FWOFF}" == "1"'
+            . ' & "${REGEX("^Local/${EXTEN}@internal-users-" ${CHANNEL})}" != "1"';
 
         return implode("\n\t", [
             "same => n,ExecIf(\$[$when]?Set(__FW_DISABLE=))",

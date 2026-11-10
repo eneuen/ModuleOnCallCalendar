@@ -77,6 +77,16 @@ final class DutyPublisherTest extends TestCase
         self::assertSame(['start' => 'go', 'dial' => '', 'goto' => '2003', 'backup' => '', 'until' => '100'], DutyPublisher::forSegment($segment, 0));
     }
 
+    public function testOnlyLocalLegsToPlainExtensionsAreRung(): void
+    {
+        self::assertTrue(DutyPublisher::isDialString('Local/101@internal-users/n'));
+        self::assertTrue(DutyPublisher::isDialString('Local/101@internal-users/n&Local/102@internal-users/n'));
+        self::assertFalse(DutyPublisher::isDialString('Local/101@internal-users/n,60,tT'));
+        self::assertFalse(DutyPublisher::isDialString('PJSIP/101'));
+        self::assertFalse(DutyPublisher::isDialString('Local/101@internal-users/n&'));
+        self::assertFalse(DutyPublisher::isDialString("Local/101@internal-users/n\n"));
+    }
+
     public function testInvalidDestinationFallsBackToAGap(): void
     {
         $segment = new DutySegment(0, 100, DutyResolver::START_ELSEWHERE, DutyResolver::BY_OVERRIDE, 1, [], [], '20,1)');

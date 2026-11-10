@@ -1302,7 +1302,11 @@ function renderReport(box) {
 
 /** The calls of the report as a CSV file (times in the PBX's zone). */
 function downloadCsv(calls, range) {
-  const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  // A text cell starting with = + - @ would run as a formula in a spreadsheet: a ' in front keeps it text.
+  const cell = (v) => {
+    const text = String(v ?? '');
+    return `"${(/^[=+\-@\t\r]/.test(text) ? `'${text}` : text).replace(/"/g, '""')}"`;
+  };
   const lines = [[t('occ_When'), t('occ_CsvRouting'), t('occ_OnDuty'), t('occ_CsvOutcome'), t('occ_CsvAnsweredBy'), t('occ_CsvWait')].map(cell).join(',')];
   calls.forEach((c) => lines.push([wall(c.started_at).replace('T', ' '), t(`occ_Start_${c.start}`), c.on_duty, t(`occ_Outcome_${c.outcome}`),
     c.answered_by || '', c.wait_seconds ?? ''].map(cell).join(',')));

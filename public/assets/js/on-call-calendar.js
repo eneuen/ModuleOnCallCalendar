@@ -1762,7 +1762,10 @@
     load();
   }
   function downloadCsv(calls, range) {
-    const cell = (v) => `"${String(v != null ? v : "").replace(/"/g, '""')}"`;
+    const cell = (v) => {
+      const text = String(v != null ? v : "");
+      return `"${(/^[=+\-@\t\r]/.test(text) ? `'${text}` : text).replace(/"/g, '""')}"`;
+    };
     const lines = [[t("occ_When"), t("occ_CsvRouting"), t("occ_OnDuty"), t("occ_CsvOutcome"), t("occ_CsvAnsweredBy"), t("occ_CsvWait")].map(cell).join(",")];
     calls.forEach((c) => {
       var _a;

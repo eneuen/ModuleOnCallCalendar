@@ -57,6 +57,12 @@ final class DutyPublisher
     {
         $start = $segment->start;
         $goto = '';
+        // Dial() splits its argument at commas, so only Local legs to plain extensions are published.
+        $dial = $start === DutyResolver::START_ON_DUTY ? $segment->dialString() : '';
+        if ($dial !== '' && !self::isDialString($dial)) {
+            $start = DutyResolver::START_GAP;
+            $dial = '';
+        }
         if ($start === DutyResolver::START_ELSEWHERE) {
             $goto = $segment->destination;
             if (!self::isDestination($goto)) {
@@ -67,12 +73,18 @@ final class DutyPublisher
 
         return [
             'start' => $start,
-            'dial'  => $start === DutyResolver::START_ON_DUTY ? $segment->dialString() : '',
+            'dial'  => $dial,
             'goto'  => $goto,
             // The deciding rule's own backup; a malformed one falls back to the schedule's.
             'backup' => BackupSpec::isValid($segment->backup) ? $segment->backup : '',
             'until' => (string)min($segment->to, $now + self::MAX_AGE),
         ];
+    }
+
+    /** Legs the dialplan may ring: Local/<ext>@internal-users/n joined by &. */
+    public static function isDialString(string $dial): bool
+    {
+        return preg_match('~^Local/\d{1,20}@internal-users/n(&Local/\d{1,20}@internal-users/n)*$~D', $dial) === 1;
     }
 
     /** A number the dialplan may jump to: digits, or one of the core's named system extensions. */

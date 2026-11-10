@@ -6,6 +6,8 @@ declare(strict_types=1);
 
 namespace Modules\ModuleOnCallCalendar\Lib;
 
+use DateTimeImmutable;
+use DateTimeZone;
 use PDO;
 use Throwable;
 
@@ -28,6 +30,15 @@ final class ScheduleEditor
 {
     public const array TEMPLATES = ['shift', 'oncall', 'blank'];
     public const array BACKUP_TYPES = ['', 'member', 'queue'];
+
+    /**
+     * The most of each a schedule can hold: far more than any real plan, few
+     * enough that working out who is on duty stays quick for every schedule.
+     */
+    public const int MAX_SHIFT_TYPES = 20;
+    public const int MAX_RULES = 20;
+    public const int MAX_WINDOWS = 21;
+    public const int MAX_OVERRIDES = 500;
 
     private const int MIN_RING = 5;
     private const int MAX_RING = 300;
@@ -325,6 +336,7 @@ final class ScheduleEditor
 
         return $this->transaction(function () use ($scheduleId, $id, $from, $until, $cycle): int {
             if ($id === 0) {
+                $this->limitRules($scheduleId);
                 $this->module->prepare('INSERT INTO ' . ScheduleRepository::ROSTERS . ' (schedule_id, priority, valid_from,
                     valid_until, cycle_weeks) VALUES (?, ?, ?, ?, ?)')
                     ->execute([$scheduleId, $this->nextPriority($scheduleId), $from, $until, $cycle]);
@@ -511,7 +523,11 @@ final class ScheduleEditor
             throw new EditorException('occ_ErrTurnDays');
         }
         $windows = [];
-        foreach (is_array($data['active_hours'] ?? null) ? $data['active_hours'] : [] as $w) {
+        $given = is_array($data['active_hours'] ?? null) ? $data['active_hours'] : [];
+        if (count($given) > self::MAX_WINDOWS) {
+            throw new EditorException('occ_ErrWindows', ['n' => self::MAX_WINDOWS]);
+        }
+        foreach ($given as $w) {
             if (!is_array($w)) {
                 throw new EditorException('occ_ErrInvalid');
             }
@@ -525,6 +541,7 @@ final class ScheduleEditor
         $hours = json_encode($windows);
 
         if ($id === null) {
+            $this->limitRules($scheduleId);
             $this->module->prepare('INSERT INTO ' . ScheduleRepository::ROTATIONS . ' (schedule_id, priority, members, first_handover,
                 turn_days, active_hours, valid_until) VALUES (?, ?, ?, ?, ?, ?, ?)')
                 ->execute([$scheduleId, $this->nextPriority($scheduleId), $members, $first, $turnDays, $hours, $until]);
@@ -716,6 +733,9 @@ final class ScheduleEditor
      */
     private function insertOverride(int $scheduleId, array $row, ?int $swapGroup): int
     {
+        // Only overrides still to come count: past ones are history, and the calendar no longer weighs them.
+        $now = (new DateTimeImmutable('@' . $this->now))->setTimezone(new DateTimeZone($this->timezoneName()))->format('Y-m-d H:i');
+        $this->limit(ScheduleRepository::OVERRIDES, $scheduleId, self::MAX_OVERRIDES, ' AND end_at > ?', [$now]);
         $this->module->prepare('INSERT INTO ' . ScheduleRepository::OVERRIDES . ' (schedule_id, kind, start_at, end_at, members,
             destination, note, swap_group, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
             ->execute([$scheduleId, $row['kind'], $row['start_at'], $row['end_at'], $row['members'], $row['destination'],
@@ -909,6 +929,34 @@ final class ScheduleEditor
         return false;
     }
 
+    /** Refuses to add a roster or rotation to a schedule that already has the most it can hold. */
+    private function limitRules(int $scheduleId): void
+    {
+        $count = 0;
+        foreach ([ScheduleRepository::ROSTERS, ScheduleRepository::ROTATIONS] as $table) {
+            $statement = $this->module->prepare("SELECT COUNT(*) FROM $table WHERE schedule_id = ?");
+            $statement->execute([$scheduleId]);
+            $count += (int)$statement->fetchColumn();
+        }
+        if ($count >= self::MAX_RULES) {
+            throw new EditorException('occ_ErrLimit', ['n' => self::MAX_RULES]);
+        }
+    }
+
+    /**
+     * Refuses to add a row to a schedule that already has the most it can hold.
+     *
+     * @param list<string> $params values for $where's placeholders
+     */
+    private function limit(string $table, int $scheduleId, int $max, string $where = '', array $params = []): void
+    {
+        $statement = $this->module->prepare("SELECT COUNT(*) FROM $table WHERE schedule_id = ?$where");
+        $statement->execute([$scheduleId, ...$params]);
+        if ((int)$statement->fetchColumn() >= $max) {
+            throw new EditorException('occ_ErrLimit', ['n' => $max]);
+        }
+    }
+
     private function timezoneName(): string
     {
         return ModuleContext::timezone($this->core)->getName();
@@ -975,6 +1023,7 @@ final class ScheduleEditor
     /** @param list<int> $weekdays */
     private function insertShiftType(int $scheduleId, string $name, string $start, string $end, array $weekdays, int $sort): int
     {
+        $this->limit(ScheduleRepository::SHIFT_TYPES, $scheduleId, self::MAX_SHIFT_TYPES);
         $this->module->prepare('INSERT INTO ' . ScheduleRepository::SHIFT_TYPES . ' (schedule_id, name, start_time, end_time,
             weekdays, sort) VALUES (?, ?, ?, ?, ?, ?)')->execute([$scheduleId, $name, $start, $end, implode(',', $weekdays), $sort]);
 
@@ -1019,7 +1068,7 @@ final class ScheduleEditor
     {
         $name = trim(preg_replace('/\s+/u', ' ', (string)$name) ?? '');
         // The core puts the name into its destination pickers as HTML, unescaped.
-        if ($name === '' || mb_strlen($name) > 60 || preg_match('/[<>&"]/', $name) === 1) {
+        if ($name === '' || mb_strlen($name) > 60 || preg_match('/[<>&"\'`]/', $name) === 1) {
             throw new EditorException('occ_ErrName');
         }
 

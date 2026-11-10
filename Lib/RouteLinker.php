@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 namespace Modules\ModuleOnCallCalendar\Lib;
 
+use MikoPBX\Core\System\SystemMessages;
 use PDO;
 
 /**
@@ -145,15 +146,12 @@ final class RouteLinker
                     $this->now, $this->actor]);
         }
         try {
-            $error = ($this->saveRoute)($routeId, $number, $timeout);
-        } catch (\Throwable $e) {
-            $error = $e->getMessage();
-        }
-        if ($error !== null) {
+            $this->save($routeId, $number, $timeout);
+        } catch (EditorException $e) {
             if ($link === null) {
                 $this->module->prepare('DELETE FROM ' . ScheduleRepository::ROUTE_LINKS . ' WHERE route_id = ?')->execute([$routeId]);
             }
-            throw new EditorException('occ_ErrRouteSave', ['reason' => $error]);
+            throw $e;
         }
         if ($link !== null) {
             $this->module->prepare('UPDATE ' . ScheduleRepository::ROUTE_LINKS . ' SET linked_timeout = ? WHERE route_id = ?')
@@ -161,6 +159,24 @@ final class RouteLinker
         }
         $this->audit((int)$schedule['id'], 'route.link', ['route_id' => $routeId, 'extension' => $route['extension'], 'timeout' => (int)$route['timeout']],
             ['route_id' => $routeId, 'extension' => $number, 'timeout' => $timeout]);
+    }
+
+    /**
+     * Saves a route through the core. A validation message from the core is
+     * shown as the reason; any other failure is logged and shown as a plain
+     * message, so internal details stay off the page.
+     */
+    private function save(int $routeId, string $extension, int $timeout): void
+    {
+        try {
+            $error = ($this->saveRoute)($routeId, $extension, $timeout);
+        } catch (\Throwable $e) {
+            SystemMessages::sysLogMsg(self::class, "Route $routeId: " . $e->getMessage(), LOG_ERR);
+            throw new EditorException('occ_ErrRouteSaveLog');
+        }
+        if ($error !== null) {
+            throw new EditorException('occ_ErrRouteSave', ['reason' => $error]);
+        }
     }
 
     /**
@@ -183,10 +199,7 @@ final class RouteLinker
         if ($row !== false && $current === (string)$link['linked_extension']) {
             // The timeout too, unless an admin changed it since the link.
             $timeout = (int)$row['timeout'] === (int)$link['linked_timeout'] ? (int)$link['previous_timeout'] : (int)$row['timeout'];
-            $error = ($this->saveRoute)($routeId, (string)$link['previous_extension'], $timeout);
-            if ($error !== null) {
-                throw new EditorException('occ_ErrRouteSave', ['reason' => $error]);
-            }
+            $this->save($routeId, (string)$link['previous_extension'], $timeout);
             $restored = true;
         }
         $this->module->prepare('DELETE FROM ' . ScheduleRepository::ROUTE_LINKS . ' WHERE route_id = ?')->execute([$routeId]);
