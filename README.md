@@ -7,7 +7,7 @@ A MikoPBX extension module that decides, from a calendar, who answers each phone
 - **Shift duty:** "The Service line rings Anna in the morning and Ben in the afternoon. If they don't answer, it goes to the Service queue."
 - **On-call:** "After hours, the emergency number rings whichever technician is on call this week. If they don't answer, it rings the backup, then voicemail."
 
-> **Status: in development.** The module is not ready for use yet. What changed is in [CHANGELOG.md](CHANGELOG.md).
+> Download the latest version from the [Releases page](https://github.com/eneuen/ModuleOnCallCalendar/releases). What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 
 ![The home page: each schedule with who is on duty now and until when, who is next, uncovered hours in the next 14 days and how calls reach it](docs/screenshots/home.png)
 

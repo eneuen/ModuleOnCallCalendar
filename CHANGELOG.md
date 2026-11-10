@@ -4,6 +4,10 @@ All notable changes to this module are listed here. Versions follow [Semantic Ve
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-10
+
+The first version of On Call Calendar: duty rosters, on-call rotations and if-no-answer routing for MikoPBX 2026.6.34 or later.
+
 Added:
 
 - **Schedules with their own internal numbers.** Each schedule's number is registered in MikoPBX as a module extension and appears in the destination lists of incoming routes, off-work time rules, IVR menus and forwarding as "Module: <name> (<number>)".
