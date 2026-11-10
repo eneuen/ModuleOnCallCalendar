@@ -1421,6 +1421,9 @@ function auditDetail(e, history) {
     const now = after ? after[key] : undefined;
     if (was === undefined && now === undefined) return;
     if (before && after && JSON.stringify(was) === JSON.stringify(now)) return;
+    // The backup's ring time only applies to a backup person, as in the settings form.
+    const types = [before, after].filter((v) => v && v.backup_type !== undefined).map((v) => v.backup_type);
+    if (key === 'backup_ring_seconds' && types.length && !types.includes('member')) return;
     const label = t(fields[key][0]);
     // An empty value stored as null or '' reads the same: no line for it.
     if (before && after) { if (show(key, was) !== show(key, now)) lines.push(`${label}: ${show(key, was)} → ${show(key, now)}`); }

@@ -72,7 +72,7 @@ When a call arrives, the module rings whoever is on duty at that moment. If nobo
 
 Calls rung by the module are ordinary MikoPBX calls: each leg appears in call history and is recorded under the PBX's recording settings.
 
-Who is on duty is kept in Asterisk's database and read when a call arrives, so changing the plan never reloads the dialplan. If that information is out of date, the call goes to the backup and then the final destination rather than to someone who may no longer be on duty.
+Who is on duty is kept in Asterisk's database and read when a call arrives, so changing the plan never reloads the dialplan. If that information is missing or out of date (for example while the module's worker is restarting), the call works out who is on duty from the plan itself; only if that fails too does it go to the backup and then the final destination, rather than to someone who may no longer be on duty.
 
 ## Using it
 

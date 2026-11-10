@@ -1874,6 +1874,8 @@
       const now = after ? after[key] : void 0;
       if (was === void 0 && now === void 0) return;
       if (before && after && JSON.stringify(was) === JSON.stringify(now)) return;
+      const types = [before, after].filter((v) => v && v.backup_type !== void 0).map((v) => v.backup_type);
+      if (key === "backup_ring_seconds" && types.length && !types.includes("member")) return;
       const label = t(fields[key][0]);
       if (before && after) {
         if (show(key, was) !== show(key, now)) lines.push(`${label}: ${show(key, was)} \u2192 ${show(key, now)}`);
