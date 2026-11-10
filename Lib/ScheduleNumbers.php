@@ -6,7 +6,9 @@ declare(strict_types=1);
 
 namespace Modules\ModuleOnCallCalendar\Lib;
 
+use Closure;
 use MikoPBX\Common\Models\Extensions;
+use MikoPBX\Common\Models\IncomingRoutingTable;
 use RuntimeException;
 
 /**
@@ -58,5 +60,27 @@ final class ScheduleNumbers
         }
 
         return array_map('strval', $extension->getMessages());
+    }
+
+    /**
+     * Saves an incoming route's destination and timeout through the core's
+     * model, for RouteLinker: the model checks that the destination exists,
+     * and its save triggers the dialplan reload. (The REST save action needs
+     * services that only exist in the core's API worker.)
+     *
+     * @return Closure(int, string, int): ?string route id, destination, timeout → error, or null when saved
+     */
+    public static function routeSaver(): Closure
+    {
+        return static function (int $routeId, string $extension, int $timeout): ?string {
+            $route = IncomingRoutingTable::findFirstById($routeId);
+            if ($route === null) {
+                return 'not found';
+            }
+            $route->extension = $extension;
+            $route->timeout = (string)$timeout;
+
+            return $route->save() ? null : (implode(' ', array_map('strval', $route->getMessages())) ?: 'unknown error');
+        };
     }
 }

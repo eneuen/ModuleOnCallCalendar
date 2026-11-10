@@ -11,7 +11,6 @@ use DateTimeZone;
 use InvalidArgumentException;
 use MikoPBX\AdminCabinet\Controllers\BaseController;
 use MikoPBX\AdminCabinet\Providers\AssetProvider;
-use MikoPBX\Common\Models\IncomingRoutingTable;
 use MikoPBX\Common\Providers\AclProvider;
 use MikoPBX\Common\Providers\JwtProvider;
 use MikoPBX\Core\System\SystemMessages;
@@ -625,21 +624,7 @@ class ModuleOnCallCalendarController extends BaseController
 
     private function linker(PDO $module, PDO $core): RouteLinker
     {
-        // The core's route model checks that the destination exists, and its
-        // save triggers the dialplan reload. (The REST save action needs
-        // services that only exist in the core's API worker.)
-        $save = static function (int $routeId, string $extension, int $timeout): ?string {
-            $route = IncomingRoutingTable::findFirstById($routeId);
-            if ($route === null) {
-                return 'not found';
-            }
-            $route->extension = $extension;
-            $route->timeout = (string)$timeout;
-
-            return $route->save() ? null : (implode(' ', array_map('strval', $route->getMessages())) ?: 'unknown error');
-        };
-
-        return new RouteLinker($module, $core, $save, $this->currentLogin(), time());
+        return new RouteLinker($module, $core, ScheduleNumbers::routeSaver(), $this->currentLogin(), time());
     }
 
     /** @param list<array{kind: string, id: int, name: string}>|array<int, array{kind: string, id: int, name: string}> $references */

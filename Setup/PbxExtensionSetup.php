@@ -14,6 +14,8 @@ use MikoPBX\Modules\Setup\PbxExtensionSetupBase;
 use Modules\ModuleOnCallCalendar\Lib\CallLog;
 use Modules\ModuleOnCallCalendar\Lib\Databases;
 use Modules\ModuleOnCallCalendar\Lib\DialplanBuilder;
+use Modules\ModuleOnCallCalendar\Lib\ModuleContext;
+use Modules\ModuleOnCallCalendar\Lib\RouteLinker;
 use Modules\ModuleOnCallCalendar\Lib\ScheduleNumbers;
 use Modules\ModuleOnCallCalendar\Lib\ScheduleRepository;
 use Throwable;
@@ -79,21 +81,28 @@ class PbxExtensionSetup extends PbxExtensionSetupBase
     }
 
     /**
-     * Without kept settings the schedules are gone for good, so their numbers
-     * are released in the core too. The core refuses for a number that a
-     * route or rule still points at; that is logged, and the admin sees the
-     * number in use there.
+     * Without kept settings the schedules are gone for good, so, as deleting a
+     * schedule does, the incoming routes the module linked are put back as
+     * they were and the numbers are released in the core too. The core
+     * refuses a number that something else still points at (a route or rule
+     * set by hand); that is logged, and the admin sees the number in use there.
      */
     private function removeScheduleNumbers(): void
     {
         try {
-            $schedules = (new ScheduleRepository(Databases::openReadOnly($this->moduleDir . '/db/module.db')))->schedules();
+            $module = Databases::openWritable($this->moduleDir . '/db/module.db');
+            $schedules = (new ScheduleRepository($module))->schedules();
+            $linker = new RouteLinker($module, Databases::openReadOnly(ModuleContext::coreDbFile()), ScheduleNumbers::routeSaver(), 'uninstall', time());
         } catch (Throwable $e) {
             SystemMessages::sysLogMsg(static::class, 'Schedule numbers not released: ' . $e->getMessage(), LOG_WARNING);
-
             return;
         }
         foreach ($schedules as $schedule) {
+            try {
+                $linker->unlinkAll((int)$schedule['id']);
+            } catch (Throwable $e) {
+                SystemMessages::sysLogMsg(static::class, "Routes of {$schedule['number']} not put back: " . $e->getMessage(), LOG_WARNING);
+            }
             $reasons = ScheduleNumbers::unregister((string)$schedule['number']);
             if ($reasons !== []) {
                 SystemMessages::sysLogMsg(static::class, "Number {$schedule['number']} kept: " . implode(' ', $reasons), LOG_WARNING);
