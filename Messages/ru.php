@@ -178,7 +178,7 @@ return [
     'occ_RosterUntil' => 'по %date%',
     'occ_Rotation' => 'Очерёдность',
     'occ_RotationPeople' => 'Сотрудники в порядке очереди',
-    'occ_RotationSummary' => 'Дежурства по %days% дн., первая передача %at%',
+    'occ_RotationSummary' => 'Дежурства по %n% дн., первая передача %at%',
     'occ_RoutedFrom' => 'Источников звонков: %n%',
     'occ_RuleOrder' => 'Какое правило важнее',
     'occ_RuleOrderHint' => 'Если график и очерёдность покрывают одно и то же время, решает то, что выше в списке.',

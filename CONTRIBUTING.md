@@ -91,7 +91,7 @@ The core creates the module's tables from the model annotations in `Models/` on 
 | `Setup/PbxExtensionSetup.php` | Installer: sidebar entry; on uninstall the AGI links and AstDB keys the core leaves behind, and without kept settings the linked routes put back and the numbers released |
 | `App/Controllers/`, `App/Views/` | The module page and its JSON actions, each checked against the role's rights. Reads are AJAX GETs; writes must be AJAX POSTs with a Bearer token that grants the action |
 | `public/assets/` | Page script and styles; `js/vendor/` and `css/vendor/` hold the FullCalendar bundles, `js/vendor/` also its licence |
-| `Messages/` | Interface text (English and Russian) |
+| `Messages/` | Interface text (English and Russian). A text with a count can have a form per plural category, such as `occ_CycleWeeks_one`; the page picks it with the language's plural rules and falls back to the plain key |
 | `build/`, `package.json` | Builds the browser assets with esbuild, and the release zip (`build/package.sh`) |
 | `tests/Unit/` | PHPUnit tests that run without a PBX |
 | `tools/callsim/` | Real-call test harness and the module's probe scenarios |

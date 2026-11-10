@@ -22,6 +22,14 @@ const t = (key) => (globalTranslate && globalTranslate[key]) || key;
 /** Fills %name% placeholders, as the server's translations do. */
 const sub = (text, values) => Object.entries(values).reduce((s, [k, v]) => s.split(`%${k}%`).join(String(v)), text);
 const LOCALE = document.documentElement.lang || undefined;
+/**
+ * A text with a count: the key with the language's plural category (occ_X_one,
+ * occ_X_few, …) when there is one, otherwise the key itself.
+ */
+const plural = (key, n, values = {}) => {
+  const form = `${key}_${new Intl.PluralRules(LOCALE).select(n)}`;
+  return sub(globalTranslate && globalTranslate[form] ? globalTranslate[form] : t(key), { n, ...values });
+};
 const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7];
 const TABS = ['calendar', 'roster', 'rotation', 'activity', 'settings'];
 const weekdayName = (d) => t(`occ_Weekday${d}`);
@@ -424,7 +432,7 @@ function scheduleCard({ schedule, members, status, references }) {
       : status.gap_seconds > 0 ? tag('orange', 'exclamation circle', sub(t('occ_GapsComing'), { hours: hours(status.gap_seconds) }), href)
         : tag('green', 'check circle', t('occ_Covered14'));
   const wiring = references.length
-    ? el('span', { class: 'occ-meta' }, icon('sign-in alternate'), sub(t('occ_RoutedFrom'), { n: references.length }))
+    ? el('span', { class: 'occ-meta' }, icon('sign-in alternate'), plural('occ_RoutedFrom', references.length))
     : el('span', { class: 'occ-meta occ-warn' }, icon('unlink'), t('occ_NotReachable'));
 
   return el('article', { class: `occ-card${enabled ? '' : ' occ-card-disabled'}` },
@@ -905,7 +913,7 @@ function renderRoster(body) {
 
 function rosterLabel(r) {
   const until = r.valid_until ? sub(t('occ_RosterUntil'), { date: r.valid_until }) : t('occ_RosterNoEnd');
-  const cycle = r.cycle_weeks > 1 ? ` · ${sub(t('occ_CycleWeeks'), { n: r.cycle_weeks })}` : '';
+  const cycle = r.cycle_weeks > 1 ? ` · ${plural('occ_CycleWeeks', r.cycle_weeks)}` : '';
   return `${sub(t('occ_RosterFrom'), { date: r.valid_from })} ${until}${cycle}`;
 }
 
@@ -941,7 +949,7 @@ function rosterDialog(roster) {
     el('div', { class: 'two fields' },
       field(t('occ_ValidFrom'), el('input', { type: 'date', value: form.valid_from, oninput: (e) => { form.valid_from = e.target.value; } })),
       field(t('occ_ValidUntil'), el('input', { type: 'date', value: form.valid_until, oninput: (e) => { form.valid_until = e.target.value; } }), t('occ_ValidUntilHint'))),
-    field(t('occ_Cycle'), select([1, 2, 3, 4].map((n) => [n, sub(t('occ_CycleWeeks'), { n })]), form.cycle_weeks,
+    field(t('occ_Cycle'), select([1, 2, 3, 4].map((n) => [n, plural('occ_CycleWeeks', n)]), form.cycle_weeks,
       { onchange: (e) => { form.cycle_weeks = Number(e.target.value); } }), t('occ_CycleHint'))),
   () => post('saveRoster', { id: state.scheduleId, roster: form }).then((r) => { state.rosterId = r.id; return refresh(); }),
   t('occ_Save'),
@@ -964,7 +972,7 @@ function renderRotation(body) {
       el('div', { class: 'occ-section-head' },
         el('div', { class: 'occ-chain' }, r.members.flatMap((m, i) => [i ? icon('angle right occ-chain-arrow') : null, memberPerson(m, members)])),
         can('saveRotation') ? button(t('occ_Edit'), () => rotationForm(body, { ...r, user_ids: r.members.map((m) => userOfMember(m, members)).filter(Boolean) }), 'mini basic', 'pencil') : null),
-      el('p', { class: 'occ-note', text: sub(t('occ_RotationSummary'), { days: r.turn_days, at: r.first_handover }) }),
+      el('p', { class: 'occ-note', text: plural('occ_RotationSummary', r.turn_days, { at: r.first_handover }) }),
       preview(r))),
     can('saveRotation') ? el('div', { class: 'occ-actions' }, button(t('occ_AddRotation'), add, 'basic', 'plus')) : null);
 }

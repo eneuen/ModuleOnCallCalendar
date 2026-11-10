@@ -5,6 +5,10 @@
   var t = (key) => globalTranslate && globalTranslate[key] || key;
   var sub = (text, values) => Object.entries(values).reduce((s, [k, v]) => s.split(`%${k}%`).join(String(v)), text);
   var LOCALE = document.documentElement.lang || void 0;
+  var plural = (key, n, values = {}) => {
+    const form = `${key}_${new Intl.PluralRules(LOCALE).select(n)}`;
+    return sub(globalTranslate && globalTranslate[form] ? globalTranslate[form] : t(key), { n, ...values });
+  };
   var WEEKDAYS = [1, 2, 3, 4, 5, 6, 7];
   var TABS = ["calendar", "roster", "rotation", "activity", "settings"];
   var weekdayName = (d) => t(`occ_Weekday${d}`);
@@ -352,7 +356,7 @@
     const href = `#/schedule/${schedule.id}/calendar`;
     const enabled = String(schedule.enabled) === "1";
     const coverage = status.gap_now ? tag("red", "exclamation triangle", t("occ_GapNow")) : !status.planned ? tag("grey", "calendar outline", t("occ_NothingPlanned")) : status.gap_seconds > 0 ? tag("orange", "exclamation circle", sub(t("occ_GapsComing"), { hours: hours(status.gap_seconds) }), href) : tag("green", "check circle", t("occ_Covered14"));
-    const wiring = references.length ? el("span", { class: "occ-meta" }, icon("sign-in alternate"), sub(t("occ_RoutedFrom"), { n: references.length })) : el("span", { class: "occ-meta occ-warn" }, icon("unlink"), t("occ_NotReachable"));
+    const wiring = references.length ? el("span", { class: "occ-meta" }, icon("sign-in alternate"), plural("occ_RoutedFrom", references.length)) : el("span", { class: "occ-meta occ-warn" }, icon("unlink"), t("occ_NotReachable"));
     return el(
       "article",
       { class: `occ-card${enabled ? "" : " occ-card-disabled"}` },
@@ -1046,7 +1050,7 @@
   }
   function rosterLabel(r) {
     const until = r.valid_until ? sub(t("occ_RosterUntil"), { date: r.valid_until }) : t("occ_RosterNoEnd");
-    const cycle = r.cycle_weeks > 1 ? ` \xB7 ${sub(t("occ_CycleWeeks"), { n: r.cycle_weeks })}` : "";
+    const cycle = r.cycle_weeks > 1 ? ` \xB7 ${plural("occ_CycleWeeks", r.cycle_weeks)}` : "";
     return `${sub(t("occ_RosterFrom"), { date: r.valid_from })} ${until}${cycle}`;
   }
   function cellDialog(roster, shift, week, weekday, users) {
@@ -1121,7 +1125,7 @@
           } }), t("occ_ValidUntilHint"))
         ),
         field(t("occ_Cycle"), select(
-          [1, 2, 3, 4].map((n) => [n, sub(t("occ_CycleWeeks"), { n })]),
+          [1, 2, 3, 4].map((n) => [n, plural("occ_CycleWeeks", n)]),
           form.cycle_weeks,
           { onchange: (e) => {
             form.cycle_weeks = Number(e.target.value);
@@ -1160,7 +1164,7 @@
           el("div", { class: "occ-chain" }, r.members.flatMap((m, i) => [i ? icon("angle right occ-chain-arrow") : null, memberPerson(m, members)])),
           can("saveRotation") ? button(t("occ_Edit"), () => rotationForm(body, { ...r, user_ids: r.members.map((m) => userOfMember(m, members)).filter(Boolean) }), "mini basic", "pencil") : null
         ),
-        el("p", { class: "occ-note", text: sub(t("occ_RotationSummary"), { days: r.turn_days, at: r.first_handover }) }),
+        el("p", { class: "occ-note", text: plural("occ_RotationSummary", r.turn_days, { at: r.first_handover }) }),
         preview(r)
       )),
       can("saveRotation") ? el("div", { class: "occ-actions" }, button(t("occ_AddRotation"), add, "basic", "plus")) : null
